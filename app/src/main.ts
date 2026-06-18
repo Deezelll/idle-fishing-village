@@ -1,5 +1,6 @@
 import './styles.css';
 import { BOATS, BUILDINGS, FISH, ZONES, type BoatId, type BuildingId, type ZoneId } from './game/balance';
+import { ZONE_SCENES, type BoatSlotConfig, type ZoneSceneConfig } from './game/scene';
 import {
   applyIncome,
   applyOfflineIncome,
@@ -20,6 +21,12 @@ import {
 import { loadState, resetState, saveState } from './game/storage';
 
 type TabId = 'harbor' | 'upgrades' | 'sea' | 'orders' | 'collection' | 'festival';
+type OverlayId = 'map' | 'orders' | 'collection' | 'festival';
+type UserSettings = {
+  animations: boolean;
+  compactHud: boolean;
+  confirmReset: boolean;
+};
 
 const app = document.querySelector<HTMLDivElement>('#app');
 
@@ -32,12 +39,70 @@ const appRoot = app;
 let activeTab: TabId = 'harbor';
 let toast = '';
 let game = loadState();
+let activeZone: ZoneId = loadActiveZone(game.unlockedZones);
+let activeOverlay: OverlayId | null = null;
+let settingsOpen = false;
+let userSettings = loadUserSettings();
 const offline = applyOfflineIncome(game);
 game = offline.state;
 if (offline.offlineFish >= 1) {
   toast = `Оффлайн улов: +${formatNumber(offline.offlineFish)} рыбы`;
 }
 saveState(game);
+
+function loadUserSettings(): UserSettings {
+  const fallback: UserSettings = {
+    animations: true,
+    compactHud: false,
+    confirmReset: true
+  };
+  const raw = localStorage.getItem('idle-fishing-village.settings.v1');
+
+  if (!raw) {
+    return fallback;
+  }
+
+  try {
+    return {
+      ...fallback,
+      ...JSON.parse(raw)
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function saveUserSettings(): void {
+  localStorage.setItem('idle-fishing-village.settings.v1', JSON.stringify(userSettings));
+}
+
+function loadActiveZone(unlockedZones: ZoneId[]): ZoneId {
+  const saved = localStorage.getItem('idle-fishing-village.active-zone.v1') as ZoneId | null;
+  if (saved && unlockedZones.includes(saved)) {
+    return saved;
+  }
+
+  return 'quiet_bay';
+}
+
+function setActiveZone(zoneId: ZoneId): void {
+  activeZone = zoneId;
+  localStorage.setItem('idle-fishing-village.active-zone.v1', zoneId);
+}
+
+function ensureActiveZone(): void {
+  if (!game.unlockedZones.includes(activeZone)) {
+    setActiveZone('quiet_bay');
+  }
+}
+
+function applyUserSettings(): void {
+  appRoot.className = [
+    'shell',
+    userSettings.animations ? '' : 'reduce-motion',
+    userSettings.compactHud ? 'compact-hud-mode' : ''
+  ].filter(Boolean).join(' ');
+}
 
 function asset(name: string): string {
   return `/assets/art/${name}`;
@@ -65,19 +130,7 @@ function buildingIcon(id: BuildingId): string {
 }
 
 function getSceneMap(): string {
-  if (activeTab === 'festival') {
-    return 'maps/map-night-harbor.png';
-  }
-
-  if (game.unlockedZones.includes('misty_strait')) {
-    return 'maps/map-misty-strait.png';
-  }
-
-  if (game.unlockedZones.includes('coral_reef')) {
-    return 'maps/map-coral-reef.png';
-  }
-
-  return 'maps/map-lighthouse-bay.png';
+  return ZONE_SCENES[activeZone].map;
 }
 
 function formatNumber(value: number): string {
@@ -96,33 +149,61 @@ function percent(value: number): string {
   return `${Math.max(0, Math.min(100, value)).toFixed(0)}%`;
 }
 
+function getCaptainXp(): number {
+  const boatLevels = totalBoatLevels();
+  return game.stars * 120 + game.completedOrders * 45 + game.festivalCount * 520 + Math.max(0, boatLevels - 1) * 28;
+}
+
+function getCaptainLevel(): number {
+  return Math.min(99, Math.floor(getCaptainXp() / 140));
+}
+
+function rarityLabel(rarity: (typeof FISH)[number]['rarity']): string {
+  const labels: Record<(typeof FISH)[number]['rarity'], string> = {
+    common: 'обычная',
+    uncommon: 'необычная',
+    rare: 'редкая',
+    epic: 'эпическая',
+    legendary: 'легендарная'
+  };
+
+  return labels[rarity];
+}
+
 function render(): void {
-  const stats = getStats(game);
+  ensureActiveZone();
+  const stats = getStats(game, activeZone);
   const storagePercent = (game.fish / stats.storageCapacity) * 100;
+  const scene = ZONE_SCENES[activeZone];
+  const captainLevel = getCaptainLevel();
+  const captainXp = getCaptainXp();
+  const nextCaptainXp = Math.min(99, captainLevel + 1) * 140;
+  const animationNow = Date.now();
+  applyUserSettings();
 
   appRoot.innerHTML = `
     <header class="topbar premium-hud">
       <div class="captain-card">
         <img src="${asset('captain-avatar.png')}" alt="" />
-        <div class="level-badge">12</div>
+        <div class="level-badge">${captainLevel}</div>
       </div>
-      <div class="xp-pill">
+      <div class="xp-pill" data-info="Опыт растет за звезды и выполненные заказы. Это общий прогресс капитана." title="Опыт растет за звезды и выполненные заказы.">
         <span>Опыт</span>
-        <strong>${formatNumber(game.stars * 120 + game.completedOrders * 35)} / 2.20K</strong>
+        <strong>${formatNumber(captainXp)} / ${formatNumber(nextCaptainXp || 140)}</strong>
       </div>
-      ${resourceCard(iconAsset('fish'), 'Рыба', formatNumber(game.fish))}
-      ${resourceCard(iconAsset('coin'), 'Монеты', formatNumber(game.coins))}
-      ${resourceCard(iconAsset('pearl'), 'Жемчуг', formatNumber(game.pearls))}
-      <button class="icon-button gear" data-action="reset" title="Сбросить прогресс" aria-label="Сбросить прогресс">⚙</button>
+      ${resourceCard(iconAsset('fish'), 'Рыба', formatNumber(game.fish), 'top-fish', 'Рыба копится автоматически. Ее продают за монеты и тратят на заказы.')}
+      ${resourceCard(iconAsset('coin'), 'Монеты', formatNumber(game.coins), 'top-coins', 'Монеты нужны для лодок, зданий и открытия новых зон.')}
+      ${resourceCard(iconAsset('pearl'), 'Жемчуг', formatNumber(game.pearls), 'top-pearls', 'Жемчуг остается после фестиваля и дает постоянные бонусы.')}
+      <button class="icon-button gear" data-action="open-settings" title="Настройки" aria-label="Открыть настройки">⚙</button>
     </header>
 
     <section class="resources compact-resources" aria-label="Ресурсы">
-      ${resourceCard(iconAsset('fish'), 'Улов', `${formatNumber(game.fish)} / ${formatNumber(stats.storageCapacity)}`)}
-      ${resourceCard(iconAsset('coin'), 'Доход', `+${formatNumber(stats.fishPerSecond * stats.fishPrice)}/сек`)}
-      ${resourceCard(iconAsset('pearl'), 'Звезды', formatNumber(game.stars))}
+      ${resourceCard(iconAsset('fish'), 'Улов', `${formatNumber(game.fish)} / ${formatNumber(stats.storageCapacity)}`, 'compact-fish', 'Сколько рыбы сейчас лежит на складе.')}
+      ${resourceCard(iconAsset('coin'), 'Доход', `+${formatNumber(stats.fishPerSecond * stats.fishPrice)}/сек`, 'compact-income', 'Примерная стоимость нового улова в секунду.')}
+      ${resourceCard(iconAsset('pearl'), 'Звезды', formatNumber(game.stars), 'compact-stars', 'Звезды дают прогресс к Морскому фестивалю.')}
     </section>
 
-    <section class="village asset-scene" style="--scene-map: url('${asset(getSceneMap())}')" aria-label="Рыбацкая деревня">
+    <section class="village asset-scene zone-${activeZone}" style="--scene-map: url('${asset(getSceneMap())}'); --scene-position: ${scene.mapPosition}; --boat-phase: -${animationNow % 4800}ms; --wake-phase: -${animationNow % 2700}ms; --water-phase: -${animationNow % 9000}ms; --wing-phase: -${animationNow % 720}ms; --gull-a-phase: -${animationNow % 14000}ms; --gull-b-phase: -${(animationNow + 8000) % 19000}ms;" aria-label="${zoneName(activeZone)}">
       ${renderSceneOverlay()}
     </section>
 
@@ -130,98 +211,167 @@ function render(): void {
       <div class="panel-row">
         <div>
           <p class="label">Склад</p>
-          <strong>${formatNumber(game.fish)} / ${formatNumber(stats.storageCapacity)}</strong>
+          <strong data-value="storage-summary">${formatNumber(game.fish)} / ${formatNumber(stats.storageCapacity)}</strong>
         </div>
-        <button class="primary-action" data-action="sell" ${game.fish < 1 ? 'disabled' : ''}>Продать</button>
+        <button class="primary-action" data-action="sell" data-control="sell" ${game.fish < 1 ? 'disabled' : ''}>Продать</button>
       </div>
-      <div class="meter"><span style="width: ${percent(storagePercent)}"></span></div>
-      <p class="hint">Цена: ${stats.fishPrice.toFixed(1)} монеты. Бонус коллекции: x${stats.collectionBonus.toFixed(2)}.</p>
+      <div class="meter"><span data-meter="storage" style="width: ${percent(storagePercent)}"></span></div>
+      <p class="hint" data-value="price-hint">Цена: ${stats.fishPrice.toFixed(1)} монеты. Бонус коллекции: x${stats.collectionBonus.toFixed(2)}.</p>
     </section>
 
-    <section class="content-shell">
+    <section class="content-shell" data-region="active-tab">
       ${renderActiveTab()}
     </section>
 
     <footer class="next-goal">
       <span>Следующая цель</span>
-      <strong>${getNextGoal(game)}</strong>
+      <strong data-value="next-goal">${getNextGoal(game)}</strong>
     </footer>
 
-    <nav class="tabbar" aria-label="Разделы игры">
+    <nav class="tabbar compact-tabbar" aria-label="Основные разделы">
       ${tabButton('harbor', '⌂', 'Гавань')}
       ${tabButton('upgrades', '⇧', 'Апгрейд')}
-      ${tabButton('sea', '◌', 'Море')}
-      ${tabButton('orders', '☰', 'Заказы')}
-      ${tabButton('collection', '◇', 'Рыбы')}
-      ${tabButton('festival', '✦', 'Фест')}
+      ${tabButton('sea', '♜', 'Маяк')}
     </nav>
 
+    ${settingsOpen ? renderSettingsPanel() : ''}
+    ${activeOverlay ? renderActionOverlay(activeOverlay) : ''}
     ${toast ? `<div class="toast">${toast}</div>` : ''}
   `;
 }
 
-function resourceCard(icon: string, label: string, value: string): string {
+function resourceCard(icon: string, label: string, value: string, valueKey?: string, info?: string): string {
   return `
-    <article>
+    <article ${info ? `data-info="${info}" title="${info}"` : ''}>
       <img src="${icon}" alt="" />
       <span>${label}</span>
-      <strong>${value}</strong>
+      <strong ${valueKey ? `data-value="${valueKey}"` : ''}>${value}</strong>
     </article>
   `;
 }
 
 function renderSceneOverlay(): string {
-  const stats = getStats(game);
-  const firstOrder = game.orders[0];
-  const orderProgress = firstOrder ? (game.fish / firstOrder.fishRequired) * 100 : 100;
+  const scene = ZONE_SCENES[activeZone];
 
   return `
     <div class="harbor-motion" aria-hidden="true">
       <span class="water-shine shine-a"></span>
       <span class="water-shine shine-b"></span>
       <span class="water-shine shine-c"></span>
-      <img class="scene-prop boat-prop boat-prop-a" src="${propAsset('rowboat')}" alt="" />
-      <img class="scene-prop boat-prop boat-prop-b" src="${propAsset('motorboat')}" alt="" />
-      <img class="scene-prop boat-prop boat-prop-c" src="${propAsset('motorboat')}" alt="" />
-      <img class="scene-prop dock-prop" src="${propAsset('fish-crate')}" alt="" />
+      ${renderSceneBoats(scene)}
       <span class="gull gull-a"></span>
       <span class="gull gull-b"></span>
     </div>
-    <article class="task-board">
-      <strong>Задания</strong>
-      <span>${firstOrder ? firstOrder.title : 'Свежий улов'}</span>
-      <div class="task-meter"><b style="width: ${percent(orderProgress)}"></b></div>
-      <em>${firstOrder ? `${formatNumber(game.fish)} / ${formatNumber(firstOrder.fishRequired)}` : 'Готово'}</em>
-    </article>
     <div class="side-actions">
-      <button data-tab="festival"><img src="${iconAsset('ticket')}" alt="" /><span>Событие</span></button>
-      <button data-tab="collection"><img src="${iconAsset('aquarium')}" alt="" /><span>Достижения</span></button>
-      <button data-tab="orders"><img src="${iconAsset('order')}" alt="" /><span>Заказы</span></button>
-    </div>
-    ${sceneLabel('Верфь', game.boats.rowboat + game.boats.motorboat, '+ ' + formatNumber(stats.fishPerSecond * 0.34) + '/сек', 'left: 7%; top: 41%;')}
-    ${sceneLabel('Хранилище', game.buildings.warehouse, '+ ' + formatNumber(stats.storageCapacity), 'left: 39%; top: 26%;')}
-    ${sceneLabel('Рынок', game.buildings.market, '+ ' + formatNumber(stats.fishPrice * 100) + '%', 'right: 8%; top: 30%;')}
-    ${boatTimer('+ ' + formatNumber(stats.fishPerSecond * 7.7), '00:12', 'left: 39%; bottom: 27%;')}
-    ${boatTimer('+ ' + formatNumber(stats.fishPerSecond * 5.1), '00:15', 'right: 10%; bottom: 30%;')}
-  `;
-}
-
-function sceneLabel(title: string, level: number, income: string, style: string): string {
-  return `
-    <div class="scene-label" style="${style}">
-      <small>Ур. ${level}</small>
-      <strong>${title}</strong>
-      <span><img src="${iconAsset('coin')}" alt="" />${income}</span>
+      <button data-action="open-overlay" data-overlay="festival"><img src="${iconAsset('ticket')}" alt="" /><span>Событие</span></button>
+      <button data-action="open-overlay" data-overlay="collection"><img src="${iconAsset('aquarium')}" alt="" /><span>Достижения</span></button>
+      <button data-action="open-overlay" data-overlay="orders"><img src="${iconAsset('order')}" alt="" /><span>Заказы</span></button>
+      <button data-action="open-overlay" data-overlay="map"><img src="${iconAsset('map')}" alt="" /><span>Карта</span></button>
     </div>
   `;
 }
 
-function boatTimer(income: string, time: string, style: string): string {
+function renderSceneBoats(scene: ZoneSceneConfig): string {
+  return scene.boats
+    .filter((slot) => game.boats[slot.boatId] > 0)
+    .map((slot) => renderSceneBoat(slot))
+    .join('');
+}
+
+function renderSceneBoat(slot: BoatSlotConfig): string {
+  const level = game.boats[slot.boatId];
+  const tier = level >= 6 ? 'veteran' : level >= 3 ? 'upgraded' : 'fresh';
+
   return `
-    <div class="boat-timer" style="${style}">
-      <strong><img src="${iconAsset('coin')}" alt="" />${income}</strong>
-      <span>${time}</span>
+    <span class="boat-wake" style="${slot.wakeStyle}"></span>
+    <img class="scene-prop scene-boat boat-tier-${tier} ${slot.mirror ? 'mirrored' : ''}" src="${asset(slot.asset)}" alt="" style="${slot.style}" />
+  `;
+}
+
+function renderSettingsPanel(): string {
+  return `
+    <div class="settings-backdrop" data-action="close-settings" role="presentation"></div>
+    <section class="settings-panel" role="dialog" aria-modal="true" aria-label="Настройки игры">
+      <div class="settings-header">
+        <div>
+          <span>Удобство</span>
+          <h2>Настройки</h2>
+        </div>
+        <button class="icon-button" data-action="close-settings" aria-label="Закрыть настройки">×</button>
+      </div>
+      ${settingsToggle('animations', 'Анимации сцены', 'Вода, лодки и чайки двигаются плавно.', userSettings.animations)}
+      ${settingsToggle('compactHud', 'Компактный интерфейс', 'Больше места для гавани на маленьком экране.', userSettings.compactHud)}
+      ${settingsToggle('confirmReset', 'Защита прогресса', 'Перед сбросом игра спросит подтверждение.', userSettings.confirmReset)}
+      <button class="danger-action" data-action="reset-progress">Сбросить прогресс</button>
+    </section>
+  `;
+}
+
+function renderActionOverlay(overlay: OverlayId): string {
+  const titles: Record<OverlayId, string> = {
+    map: 'Карта бухт',
+    orders: 'Заказы',
+    collection: 'Достижения',
+    festival: 'Событие'
+  };
+
+  return `
+    <div class="overlay-backdrop" data-action="close-overlay" role="presentation"></div>
+    <section class="action-overlay action-overlay-${overlay}" role="dialog" aria-modal="true" aria-label="${titles[overlay]}">
+      <div class="overlay-header">
+        <div>
+          <span>${overlay === 'map' ? zoneName(activeZone) : 'Рыбацкая деревня'}</span>
+          <h2>${titles[overlay]}</h2>
+        </div>
+        <button class="icon-button" data-action="close-overlay" aria-label="Закрыть">×</button>
+      </div>
+      ${overlay === 'map' ? renderMapOverlay() : ''}
+      ${overlay === 'orders' ? renderOrders() : ''}
+      ${overlay === 'collection' ? renderCollection() : ''}
+      ${overlay === 'festival' ? renderFestival() : ''}
+    </section>
+  `;
+}
+
+function renderMapOverlay(): string {
+  return `
+    <article class="map-full" style="--map-preview: url('${asset('maps/zone-map.jpg')}')">
+      <span>Выбери открытую бухту. Закрытые зоны станут доступны после прокачки маяка и накопления монет.</span>
+    </article>
+    <div class="zone-grid zone-map-grid overlay-zone-grid">
+      ${ZONES.map((zone) => {
+        const unlocked = game.unlockedZones.includes(zone.id);
+        const canUnlock = game.coins >= zone.unlockCost && game.buildings.lighthouse >= zone.lighthouseLevel;
+        const selected = activeZone === zone.id;
+        const scene = ZONE_SCENES[zone.id];
+        return `
+          <article class="zone-card zone-map-card ${unlocked ? 'unlocked' : 'locked'} ${selected ? 'selected' : ''}" style="--zone-card-image: url('${asset(scene.map)}'); --zone-card-position: ${scene.cardPosition};">
+            <div>
+              ${!unlocked ? '<b class="zone-lock">🔒</b>' : ''}
+              <strong>${zone.name}</strong>
+              <p>${zone.description}</p>
+              <span>x${zone.multiplier.toFixed(2)} добыча</span>
+            </div>
+            <button data-action="${unlocked ? 'select-zone' : 'unlock-zone'}" data-id="${zone.id}" ${selected || (!unlocked && !canUnlock) ? 'disabled' : ''}>
+              ${selected ? 'Выбрано' : unlocked ? 'Перейти' : `${formatNumber(zone.unlockCost)} монет`}
+            </button>
+            ${!unlocked ? `<small>Нужен маяк ур. ${zone.lighthouseLevel}</small>` : ''}
+          </article>
+        `;
+      }).join('')}
     </div>
+  `;
+}
+
+function settingsToggle(id: keyof UserSettings, title: string, text: string, enabled: boolean): string {
+  return `
+    <button class="settings-toggle ${enabled ? 'enabled' : ''}" data-action="toggle-setting" data-id="${id}" aria-pressed="${enabled}">
+      <span>
+        <strong>${title}</strong>
+        <em>${text}</em>
+      </span>
+      <b>${enabled ? 'Вкл' : 'Выкл'}</b>
+    </button>
   `;
 }
 
@@ -352,14 +502,31 @@ function renderBuildingUpgrade(building: (typeof BUILDINGS)[number]): string {
 }
 
 function renderSea(): string {
+  const stats = getStats(game, activeZone);
+  const lighthouseCost = getBuildingCost(game, 'lighthouse');
+  const nextLockedZone = ZONES.find((zone) => !game.unlockedZones.includes(zone.id));
   return `
     <div class="section-title">
       <div>
-        <span>Экспедиции</span>
-        <h2>Зоны моря</h2>
+        <span>Открытие бухт</span>
+        <h2>Маяк и экспедиции</h2>
       </div>
       <strong>Маяк ур. ${game.buildings.lighthouse}</strong>
     </div>
+    <article class="wide-card sea-help-card">
+      <img src="${buildingIcon('lighthouse')}" alt="" />
+      <div>
+        <strong>Прокачивай маяк, чтобы открыть новые бухты</strong>
+        <p>Маяк открывает маршруты, повышает ценность экспедиций и ведёт к новым кораблям. Карта выбора бухты находится в правом HUD.</p>
+      </div>
+    </article>
+    <div class="stat-grid lighthouse-stats">
+      ${miniStat('Текущая бухта', zoneName(activeZone))}
+      ${miniStat('Бонус зоны', `x${stats.bestZoneMultiplier.toFixed(2)}`)}
+      ${miniStat('Уровень маяка', `${game.buildings.lighthouse}`)}
+      ${miniStat('След. маяк', `${formatNumber(lighthouseCost)} монет`)}
+    </div>
+    ${nextLockedZone ? `<p class="sea-next">Следующая бухта: ${nextLockedZone.name}. Нужен маяк ур. ${nextLockedZone.lighthouseLevel} и ${formatNumber(nextLockedZone.unlockCost)} монет.</p>` : '<p class="sea-next">Все бухты открыты. Дальше копи звезды для Морского фестиваля.</p>'}
     <div class="zone-grid">
       ${ZONES.map((zone) => {
         const unlocked = game.unlockedZones.includes(zone.id);
@@ -367,6 +534,7 @@ function renderSea(): string {
         return `
           <article class="zone-card ${unlocked ? 'unlocked' : ''}">
             <div>
+              ${!unlocked ? '<b class="zone-lock">🔒</b>' : ''}
               <strong>${zone.name}</strong>
               <p>${zone.description}</p>
               <span>x${zone.multiplier.toFixed(2)} добыча</span>
@@ -424,10 +592,10 @@ function renderCollection(): string {
         const discovered = count > 0;
         const available = game.unlockedZones.includes(fish.zone);
         return `
-          <article class="fish-card ${discovered ? 'found' : ''}">
-            <img src="${iconAsset('fish')}" alt="" />
+          <article class="fish-card ${discovered ? 'found' : ''} rarity-${fish.rarity}">
+            <img src="${asset(`fish/${fish.icon}`)}" alt="" />
             <strong>${discovered || available ? fish.name : '???'}</strong>
-            <span>${fish.rarity}</span>
+            <span>${rarityLabel(fish.rarity)}</span>
             <em>${discovered ? `${formatNumber(count)} поймано` : available ? 'Можно поймать' : zoneName(fish.zone)}</em>
           </article>
         `;
@@ -483,16 +651,78 @@ function zoneName(id: ZoneId): string {
   return ZONES.find((zone) => zone.id === id)?.name ?? id;
 }
 
+function setText(selector: string, value: string): void {
+  const element = appRoot.querySelector<HTMLElement>(selector);
+  if (element) {
+    element.textContent = value;
+  }
+}
+
+function setMeter(selector: string, value: string): void {
+  const element = appRoot.querySelector<HTMLElement>(selector);
+  if (element) {
+    element.style.width = value;
+  }
+}
+
+function renderToast(): void {
+  const existingToast = appRoot.querySelector<HTMLElement>('.toast');
+  if (!toast) {
+    existingToast?.remove();
+    return;
+  }
+
+  if (existingToast) {
+    existingToast.textContent = toast;
+    return;
+  }
+
+  appRoot.insertAdjacentHTML('beforeend', `<div class="toast">${toast}</div>`);
+}
+
+function refreshDynamicUi(): void {
+  const stats = getStats(game, activeZone);
+  const storagePercent = (game.fish / stats.storageCapacity) * 100;
+
+  setText('[data-value="top-fish"]', formatNumber(game.fish));
+  setText('[data-value="top-coins"]', formatNumber(game.coins));
+  setText('[data-value="top-pearls"]', formatNumber(game.pearls));
+  setText('[data-value="compact-fish"]', `${formatNumber(game.fish)} / ${formatNumber(stats.storageCapacity)}`);
+  setText('[data-value="compact-income"]', `+${formatNumber(stats.fishPerSecond * stats.fishPrice)}/сек`);
+  setText('[data-value="compact-stars"]', formatNumber(game.stars));
+  setText('[data-value="storage-summary"]', `${formatNumber(game.fish)} / ${formatNumber(stats.storageCapacity)}`);
+  setText('[data-value="price-hint"]', `Цена: ${stats.fishPrice.toFixed(1)} монеты. Бонус коллекции: x${stats.collectionBonus.toFixed(2)}.`);
+  setText('[data-value="next-goal"]', getNextGoal(game));
+  setMeter('[data-meter="storage"]', percent(storagePercent));
+
+  const sellButton = appRoot.querySelector<HTMLButtonElement>('[data-control="sell"]');
+  if (sellButton) {
+    sellButton.disabled = game.fish < 1;
+  }
+
+  const activeTabRegion = appRoot.querySelector<HTMLElement>('[data-region="active-tab"]');
+  if (activeTabRegion && (activeTab === 'orders' || activeTab === 'collection')) {
+    activeTabRegion.innerHTML = renderActiveTab();
+  }
+}
+
 function setToast(message: string): void {
   toast = message;
+  renderToast();
   window.setTimeout(() => {
     toast = '';
-    render();
+    renderToast();
   }, 1800);
 }
 
 appRoot.addEventListener('click', (event) => {
   const target = event.target as HTMLElement;
+  const info = target.closest<HTMLElement>('[data-info]');
+  if (info?.dataset.info && !target.closest('button')) {
+    setToast(info.dataset.info);
+    return;
+  }
+
   const tab = target.closest<HTMLButtonElement>('button[data-tab]');
 
   if (tab?.dataset.tab) {
@@ -511,6 +741,54 @@ appRoot.addEventListener('click', (event) => {
   const beforeCoins = game.coins;
   const beforeFish = game.fish;
   const beforePearls = game.pearls;
+
+  if (action === 'open-settings') {
+    settingsOpen = true;
+    render();
+    return;
+  }
+
+  if (action === 'close-settings') {
+    settingsOpen = false;
+    render();
+    return;
+  }
+
+  if (action === 'open-overlay' && button.dataset.overlay) {
+    activeOverlay = button.dataset.overlay as OverlayId;
+    settingsOpen = false;
+    render();
+    return;
+  }
+
+  if (action === 'close-overlay') {
+    activeOverlay = null;
+    render();
+    return;
+  }
+
+  if (action === 'toggle-setting' && id && id in userSettings) {
+    userSettings = {
+      ...userSettings,
+      [id]: !userSettings[id as keyof UserSettings]
+    };
+    saveUserSettings();
+    render();
+    return;
+  }
+
+  if (action === 'reset-progress') {
+    if (!userSettings.confirmReset || window.confirm('Сбросить весь прогресс деревни?')) {
+      game = resetState();
+      activeTab = 'harbor';
+      setActiveZone('quiet_bay');
+      settingsOpen = false;
+      setToast('Прогресс сброшен');
+      saveState(game);
+      render();
+    }
+    return;
+  }
 
   if (action === 'sell') {
     game = sellFish(game);
@@ -534,8 +812,17 @@ appRoot.addEventListener('click', (event) => {
   if (action === 'unlock-zone' && id) {
     game = unlockZone(game, id as ZoneId);
     if (game.coins !== beforeCoins) {
+      setActiveZone(id as ZoneId);
+      activeOverlay = null;
       setToast(`Открыта зона: ${zoneName(id as ZoneId)}`);
     }
+  }
+
+  if (action === 'select-zone' && id && game.unlockedZones.includes(id as ZoneId)) {
+    setActiveZone(id as ZoneId);
+    activeTab = 'harbor';
+    activeOverlay = null;
+    setToast(`Бухта выбрана: ${zoneName(id as ZoneId)}`);
   }
 
   if (action === 'complete-order' && id) {
@@ -549,14 +836,9 @@ appRoot.addEventListener('click', (event) => {
     game = runFestival(game);
     if (game.pearls !== beforePearls) {
       activeTab = 'harbor';
+      setActiveZone('quiet_bay');
       setToast('Фестиваль завершен');
     }
-  }
-
-  if (action === 'reset') {
-    game = resetState();
-    activeTab = 'harbor';
-    setToast('Прогресс сброшен');
   }
 
   saveState(game);
@@ -570,9 +852,9 @@ window.addEventListener('visibilitychange', () => {
 });
 
 setInterval(() => {
-  game = applyIncome(game, 1);
+  game = applyIncome(game, 1, true, activeZone);
   saveState(game);
-  render();
+  refreshDynamicUi();
 }, 1000);
 
 render();

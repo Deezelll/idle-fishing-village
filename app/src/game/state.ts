@@ -43,7 +43,7 @@ export function createInitialState(now = Date.now(), pearls = 0, festivalCount =
   const state: GameState = {
     saveVersion: 2,
     fish: 0,
-    coins: 35,
+    coins: 55,
     pearls,
     stars: 0,
     festivalCount,
@@ -62,15 +62,7 @@ export function createInitialState(now = Date.now(), pearls = 0, festivalCount =
       aquarium: 0
     },
     unlockedZones: ['quiet_bay'],
-    collection: {
-      sardine: 0,
-      mackerel: 0,
-      crab: 0,
-      coral_perch: 0,
-      tuna: 0,
-      moon_eel: 0,
-      pearl_ray: 0
-    },
+    collection: createEmptyCollection(),
     orders: [],
     completedOrders: 0,
     lastSavedAt: now
@@ -80,6 +72,10 @@ export function createInitialState(now = Date.now(), pearls = 0, festivalCount =
     ...state,
     orders: createOrders(state, 0)
   };
+}
+
+function createEmptyCollection(): Record<FishId, number> {
+  return Object.fromEntries(FISH.map((fish) => [fish.id, 0])) as Record<FishId, number>;
 }
 
 export function normalizeState(value: Partial<GameState> | null | undefined): GameState {
@@ -107,18 +103,20 @@ export function normalizeState(value: Partial<GameState> | null | undefined): Ga
   return trimOrders(normalized);
 }
 
-export function getStats(state: GameState): DerivedStats {
+export function getStats(state: GameState, zoneId?: ZoneId): DerivedStats {
+  const activeZone = zoneId ?? getBestUnlockedZone(state);
   const unlockedFish = FISH.filter((fish) => state.unlockedZones.includes(fish.zone));
   const uniqueFish = FISH.filter((fish) => state.collection[fish.id] > 0).length;
-  const collectionBonus = 1 + uniqueFish * BALANCE.aquariumCollectionBonus * Math.max(1, state.buildings.aquarium + 1);
-  const pearlProductionBonus = 1 + state.pearls * BALANCE.pearlProductionBonus;
-  const pearlPriceBonus = 1 + state.pearls * BALANCE.pearlPriceBonus;
-  const pierBonus = 1 + Math.max(0, state.buildings.pier - 1) * BALANCE.pierFleetBonus;
-  const workshopLevels = BOATS.reduce((sum, boat) => sum + state.boats[boat.id], 0);
-  const workshopBonus = 1 + state.buildings.workshop * workshopLevels * BALANCE.workshopBoatBonus;
-  const bestZoneMultiplier = Math.max(...ZONES.filter((zone) => state.unlockedZones.includes(zone.id)).map((zone) => zone.multiplier));
+  const collectionBonus = Math.min(1.42, 1 + uniqueFish * BALANCE.aquariumCollectionBonus * Math.max(1, state.buildings.aquarium + 1));
+  const pearlProductionBonus = Math.min(2.35, 1 + state.pearls * BALANCE.pearlProductionBonus);
+  const pearlPriceBonus = Math.min(2.1, 1 + state.pearls * BALANCE.pearlPriceBonus);
+  const pierBonus = Math.min(1.55, 1 + Math.max(0, state.buildings.pier - 1) * BALANCE.pierFleetBonus);
+  const activeBoats = getZoneBoatIds(activeZone);
+  const workshopLevels = activeBoats.reduce((sum, id) => sum + state.boats[id], 0);
+  const workshopBonus = Math.min(1.75, 1 + state.buildings.workshop * workshopLevels * BALANCE.workshopBoatBonus);
+  const zoneMultiplier = ZONES.find((zone) => zone.id === activeZone)?.multiplier ?? 1;
   const rawFishPerSecond = BOATS.reduce((sum, boat) => {
-    if (!state.unlockedZones.includes(boat.unlockZone)) {
+    if (!activeBoats.includes(boat.id) || !state.unlockedZones.includes(boat.unlockZone)) {
       return sum;
     }
 
@@ -127,7 +125,7 @@ export function getStats(state: GameState): DerivedStats {
   }, 0);
 
   return {
-    fishPerSecond: rawFishPerSecond * pierBonus * workshopBonus * collectionBonus * pearlProductionBonus * bestZoneMultiplier,
+    fishPerSecond: rawFishPerSecond * pierBonus * workshopBonus * collectionBonus * pearlProductionBonus * zoneMultiplier,
     fishPrice: BALANCE.baseFishPrice * BALANCE.marketPriceGrowth ** (state.buildings.market - 1) * pearlPriceBonus,
     storageCapacity: Math.floor(BALANCE.baseStorage * BALANCE.warehouseGrowth ** (state.buildings.warehouse - 1)),
     unlockedFish,
@@ -135,7 +133,7 @@ export function getStats(state: GameState): DerivedStats {
     collectionBonus,
     pearlProductionBonus,
     pearlPriceBonus,
-    bestZoneMultiplier
+    bestZoneMultiplier: zoneMultiplier
   };
 }
 
@@ -157,8 +155,8 @@ export function getBuildingCost(state: GameState, id: BuildingId): number {
   return upgradeCost(building.baseCost, building.costGrowth, state.buildings[id] + 1);
 }
 
-export function applyIncome(state: GameState, seconds: number, collectSpecies = true): GameState {
-  const stats = getStats(state);
+export function applyIncome(state: GameState, seconds: number, collectSpecies = true, zoneId?: ZoneId): GameState {
+  const stats = getStats(state, zoneId);
   const fishGained = stats.fishPerSecond * seconds;
   const fish = Math.min(stats.storageCapacity, state.fish + fishGained);
   const next: GameState = {
@@ -170,7 +168,7 @@ export function applyIncome(state: GameState, seconds: number, collectSpecies = 
     return next;
   }
 
-  return collectFishSamples(next, Math.max(1, Math.floor(fishGained / 8)));
+  return collectFishSamples(next, Math.max(1, Math.floor(fishGained / 8)), zoneId);
 }
 
 export function applyOfflineIncome(state: GameState, now = Date.now()): { state: GameState; offlineFish: number; offlineSeconds: number } {
@@ -312,9 +310,13 @@ export function getNextGoal(state: GameState): string {
   return 'Провести Морской фестиваль и получить жемчуг';
 }
 
-function collectFishSamples(state: GameState, samples: number): GameState {
-  const options = FISH.filter((fish) => state.unlockedZones.includes(fish.zone));
+function collectFishSamples(state: GameState, samples: number, zoneId?: ZoneId): GameState {
+  const options = FISH.filter((fish) => state.unlockedZones.includes(fish.zone) && (!zoneId || fish.zone === zoneId));
   const totalWeight = options.reduce((sum, fish) => sum + fish.weight, 0);
+  if (totalWeight <= 0) {
+    return state;
+  }
+
   const collection = { ...state.collection };
 
   for (let i = 0; i < samples; i += 1) {
@@ -332,6 +334,22 @@ function collectFishSamples(state: GameState, samples: number): GameState {
     ...state,
     collection
   };
+}
+
+function getBestUnlockedZone(state: GameState): ZoneId {
+  return ZONES.filter((zone) => state.unlockedZones.includes(zone.id)).at(-1)?.id ?? 'quiet_bay';
+}
+
+function getZoneBoatIds(zoneId: ZoneId): BoatId[] {
+  if (zoneId === 'quiet_bay') {
+    return ['rowboat', 'motorboat'];
+  }
+
+  if (zoneId === 'coral_reef') {
+    return ['netter'];
+  }
+
+  return ['trawler'];
 }
 
 function createOrders(state: GameState, seed: number): Order[] {
