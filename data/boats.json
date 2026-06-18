@@ -1,0 +1,15 @@
+[
+  {
+    "id": "rowboat",
+    "name": "Весельная лодка",
+    "role": "Стартовый доход",
+    "baseFishPerSecond": 0.6
+  },
+  {
+    "id": "motorboat",
+    "name": "Моторная лодка",
+    "role": "Быстрый ранний прогресс",
+    "baseFishPerSecond": 2.4
+  }
+]
+

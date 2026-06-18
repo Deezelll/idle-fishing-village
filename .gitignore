@@ -1,0 +1,11 @@
+node_modules/
+dist/
+android/
+.DS_Store
+*.local
+*.keystore
+*.jks
+*.aab
+*.apk
+*.log
+

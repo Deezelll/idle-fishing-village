@@ -1,0 +1,24 @@
+[
+  {
+    "id": "sardine",
+    "name": "Сардина",
+    "rarity": "common",
+    "baseValue": 2,
+    "zone": "quiet_bay"
+  },
+  {
+    "id": "mackerel",
+    "name": "Скумбрия",
+    "rarity": "common",
+    "baseValue": 4,
+    "zone": "quiet_bay"
+  },
+  {
+    "id": "coral_perch",
+    "name": "Коралловый окунь",
+    "rarity": "rare",
+    "baseValue": 18,
+    "zone": "coral_reef"
+  }
+]
+

@@ -1,0 +1,52 @@
+{
+  "style": "cozy soft 2D fishing village mobile game art",
+  "generated": {
+    "background": "village-background.png",
+    "icons": [
+      "icon-fish.png",
+      "icon-coin.png",
+      "icon-pearl.png",
+      "icon-boat.png",
+      "icon-market.png",
+      "icon-warehouse.png",
+      "icon-lighthouse.png",
+      "icon-aquarium.png",
+      "icon-order.png",
+      "icon-ticket.png",
+      "icon-speed.png",
+      "icon-storage.png"
+    ],
+    "iconSheet": "ui-icons-sheet.png",
+    "props": [
+      "prop-rowboat.png",
+      "prop-motorboat.png",
+      "prop-pier.png",
+      "prop-market.png",
+      "prop-warehouse.png",
+      "prop-lighthouse.png",
+      "prop-house.png",
+      "prop-crate.png",
+      "prop-barrel.png",
+      "prop-net.png",
+      "prop-buoy.png",
+      "prop-sparkle.png"
+    ],
+    "propSheet": "props-sheet.png"
+  },
+  "palette": {
+    "sky_top": "#ffb46f",
+    "sky_bottom": "#9edfe0",
+    "sun": "#ffe58a",
+    "water_top": "#63d0d1",
+    "water_bottom": "#0d7f8f",
+    "deep_water": "#086475",
+    "wood": "#9c633e",
+    "wood_dark": "#664028",
+    "cream": "#fff1c9",
+    "coral": "#d95d4d",
+    "gold": "#f1a83c",
+    "pearl": "#f7f2dd",
+    "ink": "#17323a",
+    "shadow": "#214b57"
+  }
+}
