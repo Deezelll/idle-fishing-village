@@ -1,0 +1,19 @@
+{
+  "generatedFor": "future mechanics",
+  "style": "cozy 3d-like fishing village UI assets",
+  "sheets": {
+    "boatUpgradeVariants": "boats-levels-sheet.svg",
+    "biomePiers": "biome-piers-sheet.svg",
+    "biomeDecor": "biome-decor-sheet.svg",
+    "rewardVfx": "reward-vfx-sheet.svg",
+    "regattaEventBanner": "regatta-event-banner.svg",
+    "loadingScreenConcept": "loading-screen-concept.svg"
+  },
+  "intendedUse": [
+    "milestone rewards",
+    "expedition rewards",
+    "biome decoration",
+    "seasonal regatta event",
+    "mobile and yandex loading screen"
+  ]
+}

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
+    "test": "vitest run",
     "build": "npm run build:mobile",
     "build:mobile": "tsc && vite build --mode mobile",
     "build:yandex": "tsc && vite build --mode yandex",
@@ -20,6 +21,7 @@
   "devDependencies": {
     "@capacitor/cli": "^8.0.0",
     "typescript": "latest",
+    "vitest": "^3.2.4",
     "vite": "latest"
   }
 }

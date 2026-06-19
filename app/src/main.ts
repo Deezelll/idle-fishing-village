@@ -7,6 +7,8 @@ import {
   buyBoat,
   buyBuilding,
   canRunFestival,
+  claimDailyReward,
+  claimExpedition,
   completeOrder,
   getBoatCost,
   getBuildingCost,
@@ -15,9 +17,21 @@ import {
   getStats,
   runFestival,
   sellFish,
+  startExpedition,
   unlockZone,
   type GameState
 } from './game/state';
+import {
+  AQUARIUM_SETS,
+  EXPEDITIONS,
+  getAquariumSetBonus,
+  getChapterGoals,
+  getCurrentChapterGoal,
+  getDailyRewardStatus,
+  getExpeditionProgress,
+  getPearlTreeBonus,
+  getZoneMastery
+} from './game/progression';
 import { loadState, resetState, saveState } from './game/storage';
 import { flushCloudState, gameplayStart, gameplayStop, loadCloudState, markGameReady, saveCloudState } from './platform/yandex';
 
@@ -188,6 +202,20 @@ function formatNumber(value: number): string {
 
 function percent(value: number): string {
   return `${Math.max(0, Math.min(100, value)).toFixed(0)}%`;
+}
+
+function formatDuration(seconds: number): string {
+  const safeSeconds = Math.max(0, Math.ceil(seconds));
+  const minutes = Math.floor(safeSeconds / 60);
+  const restSeconds = safeSeconds % 60;
+
+  if (minutes >= 60) {
+    const hours = Math.floor(minutes / 60);
+    const restMinutes = minutes % 60;
+    return `${hours}ч ${restMinutes.toString().padStart(2, '0')}м`;
+  }
+
+  return `${minutes}:${restSeconds.toString().padStart(2, '0')}`;
 }
 
 function getCaptainXp(): number {
@@ -438,12 +466,17 @@ function renderMapOverlay(): string {
         const canUnlock = game.coins >= zone.unlockCost && game.buildings.lighthouse >= zone.lighthouseLevel;
         const selected = activeZone === zone.id;
         const scene = ZONE_SCENES[zone.id];
+        const mastery = getZoneMastery(game, zone.id);
         return `
           <article class="zone-card zone-map-card ${unlocked ? 'unlocked' : 'locked'} ${selected ? 'selected' : ''}" style="--zone-card-image: url('${asset(scene.map)}'); --zone-card-position: ${scene.cardPosition};">
             <div>
               ${!unlocked ? '<b class="zone-lock">🔒</b>' : ''}
               <strong>${zone.name}</strong>
               <p>${zone.description}</p>
+              <div class="inline-progress">
+                <em>Мастерство ${mastery.percent}%</em>
+                <div class="meter"><span style="width: ${percent(mastery.percent)}"></span></div>
+              </div>
               <span>x${zone.multiplier.toFixed(2)} добыча</span>
             </div>
             <button data-action="${unlocked ? 'select-zone' : 'unlock-zone'}" data-id="${zone.id}" ${selected || (!unlocked && !canUnlock) ? 'disabled' : ''}>
@@ -516,6 +549,35 @@ function renderHarbor(): string {
       ${quickUpgrade('Рынок', `Ур. ${game.buildings.market}`, propAsset('fish-market'), 'Выше цена на рыбу', getBuildingCost(game, 'market'), 'buy-building', 'market')}
       ${quickUpgrade('Сеть', `Ур. ${game.boats.netter}`, propAsset('net'), 'Больше рыбы в сетях', getBoatCost(game, 'netter'), 'buy-boat', 'netter')}
       ${quickUpgrade('Пирс', `Ур. ${game.buildings.pier}`, propAsset('pier'), 'Больше места для лодок', getBuildingCost(game, 'pier'), 'buy-building', 'pier')}
+    </div>
+    ${renderChapterGoals()}
+  `;
+}
+
+function renderChapterGoals(): string {
+  const current = getCurrentChapterGoal(game);
+  const goals = getChapterGoals(game).slice(0, 4);
+  const progress = percent((current.current / current.target) * 100);
+
+  return `
+    <div class="progress-panel chapter-panel">
+      <div class="section-title compact">
+        <div>
+          <span>Глава деревни</span>
+          <h2>${current.title}</h2>
+        </div>
+        <strong>${progress}</strong>
+      </div>
+      <p>${current.description}</p>
+      <div class="meter"><span style="width: ${progress}"></span></div>
+      <div class="progress-list">
+        ${goals.map((goal) => `
+          <article class="${goal.current >= goal.target ? 'complete' : ''}">
+            <span>${goal.title}</span>
+            <strong>${formatNumber(goal.current)} / ${formatNumber(goal.target)}</strong>
+          </article>
+        `).join('')}
+      </div>
     </div>
   `;
 }
@@ -614,6 +676,7 @@ function renderSea(): string {
         <p>Маяк открывает маршруты, повышает ценность экспедиций и ведёт к новым кораблям. Карта выбора бухты находится в правом HUD.</p>
       </div>
     </article>
+    ${renderExpeditionPanel()}
     <div class="stat-grid lighthouse-stats">
       ${miniStat('Текущая бухта', zoneName(activeZone))}
       ${miniStat('Бонус зоны', `x${stats.bestZoneMultiplier.toFixed(2)}`)}
@@ -637,6 +700,46 @@ function renderSea(): string {
               ${unlocked ? 'Открыто' : `${formatNumber(zone.unlockCost)} монет`}
             </button>
             ${!unlocked ? `<small>Нужен маяк ур. ${zone.lighthouseLevel}</small>` : ''}
+          </article>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+function renderExpeditionPanel(): string {
+  const active = getExpeditionProgress(game);
+
+  if (active) {
+    return `
+      <article class="wide-card expedition-card">
+        <img src="${asset(active.config.icon)}" alt="" />
+        <div>
+          <strong>${active.ready ? 'Экспедиция вернулась' : active.config.title}</strong>
+          <p>${active.ready ? 'Награда готова к получению.' : `${active.config.description} Осталось ${formatDuration(active.remainingSeconds)}.`}</p>
+          <div class="meter"><span style="width: ${percent(active.percent)}"></span></div>
+        </div>
+        <button data-action="claim-expedition" ${active.ready ? '' : 'disabled'}>${active.ready ? 'Забрать' : formatDuration(active.remainingSeconds)}</button>
+      </article>
+    `;
+  }
+
+  return `
+    <div class="expedition-list">
+      ${EXPEDITIONS.map((expedition) => {
+        const locked = game.buildings.lighthouse < expedition.requiredLighthouse || !game.unlockedZones.includes(expedition.zone);
+        const disabled = locked || game.coins < expedition.costCoins;
+        return `
+          <article class="expedition-option">
+            <img src="${asset(expedition.icon)}" alt="" />
+            <div>
+              <strong>${expedition.title}</strong>
+              <p>${expedition.description}</p>
+              <span>${formatDuration(expedition.durationSeconds)} · +${formatNumber(expedition.reward.fish)} рыбы · +${expedition.reward.eventTokens} жет.</span>
+            </div>
+            <button data-action="start-expedition" data-id="${expedition.id}" ${disabled ? 'disabled' : ''}>
+              ${locked ? `Маяк ${expedition.requiredLighthouse}` : expedition.costCoins > 0 ? `${formatNumber(expedition.costCoins)} монет` : 'Старт'}
+            </button>
           </article>
         `;
       }).join('')}
@@ -680,6 +783,7 @@ function renderCollection(): string {
       </div>
       <strong>${stats.uniqueFish}/${FISH.length}</strong>
     </div>
+    ${renderAquariumSets()}
     <div class="fish-grid">
       ${FISH.map((fish) => {
         const count = game.collection[fish.id];
@@ -698,6 +802,31 @@ function renderCollection(): string {
   `;
 }
 
+function renderAquariumSets(): string {
+  const bonus = getAquariumSetBonus(game);
+
+  return `
+    <div class="bonus-grid aquarium-sets">
+      ${AQUARIUM_SETS.map((set) => {
+        const done = set.fish.every((fishId) => game.collection[fishId] > 0);
+        const found = set.fish.filter((fishId) => game.collection[fishId] > 0).length;
+        return `
+          <article class="${done ? 'complete' : ''}">
+            <strong>${set.title}</strong>
+            <p>${set.description}</p>
+            <span>${found}/${set.fish.length} · x${(1 + set.productionBonus).toFixed(2)} добыча</span>
+          </article>
+        `;
+      }).join('')}
+      <article class="complete">
+        <strong>Активные наборы</strong>
+        <p>${bonus.completedSets.length > 0 ? bonus.completedSets.map((set) => set.title).join(', ') : 'Пока нет закрытых наборов.'}</p>
+        <span>x${bonus.productionMultiplier.toFixed(2)} добыча · x${bonus.priceMultiplier.toFixed(2)} цена</span>
+      </article>
+    </div>
+  `;
+}
+
 function renderFestival(): string {
   const stats = getStats(game);
   const canFestival = canRunFestival(game);
@@ -711,6 +840,7 @@ function renderFestival(): string {
       </div>
       <strong>${game.festivalCount} раз</strong>
     </div>
+    ${renderDailyReward()}
     <article class="festival-card">
       <img src="${iconAsset('ticket')}" alt="" />
       <div>
@@ -724,6 +854,44 @@ function renderFestival(): string {
       ${miniStat('Нужно монет', `${formatNumber(game.coins)}/12K`)}
       ${miniStat('Бонус добычи', `x${stats.pearlProductionBonus.toFixed(2)}`)}
       ${miniStat('Бонус цены', `x${stats.pearlPriceBonus.toFixed(2)}`)}
+    </div>
+    ${renderPearlTree()}
+  `;
+}
+
+function renderDailyReward(): string {
+  const status = getDailyRewardStatus(game);
+
+  return `
+    <article class="wide-card daily-card ${status.claimed ? 'claimed' : ''}">
+      <img src="${asset('3d/icon-daily-chest.svg')}" alt="" />
+      <div>
+        <strong>${status.claimed ? 'Ежедневная награда получена' : `День ${status.reward.day}: ежедневная награда`}</strong>
+        <p>+${formatNumber(status.reward.coins)} монет, +${formatNumber(status.reward.fish)} рыбы, +${status.reward.eventTokens} жетонов${status.reward.pearls ? `, +${status.reward.pearls} жемч.` : ''}</p>
+      </div>
+      <button data-action="claim-daily" ${status.claimed ? 'disabled' : ''}>${status.claimed ? 'Получено' : 'Забрать'}</button>
+    </article>
+  `;
+}
+
+function renderPearlTree(): string {
+  const bonus = getPearlTreeBonus(game);
+
+  return `
+    <div class="progress-panel pearl-tree">
+      <div class="section-title compact">
+        <div>
+          <span>Жемчужное дерево</span>
+          <h2>${bonus.unlockedNodes} узл. открыто</h2>
+        </div>
+        <strong>${formatNumber(game.pearls)} жемч.</strong>
+      </div>
+      <div class="stat-grid">
+        ${miniStat('Добыча', `x${bonus.productionMultiplier.toFixed(2)}`)}
+        ${miniStat('Цена', `x${bonus.priceMultiplier.toFixed(2)}`)}
+        ${miniStat('Склад', `x${bonus.storageMultiplier.toFixed(2)}`)}
+        ${miniStat('Оффлайн', `+${bonus.offlineHoursBonus}ч`)}
+      </div>
     </div>
   `;
 }
@@ -795,7 +963,7 @@ function refreshDynamicUi(): void {
   }
 
   const activeTabRegion = appRoot.querySelector<HTMLElement>('[data-region="active-tab"]');
-  if (activeTabRegion && (activeTab === 'orders' || activeTab === 'collection')) {
+  if (activeTabRegion && (activeTab === 'orders' || activeTab === 'collection' || activeTab === 'sea' || activeTab === 'festival' || activeTab === 'harbor')) {
     activeTabRegion.innerHTML = renderActiveTab();
   }
 }
@@ -923,6 +1091,29 @@ appRoot.addEventListener('click', (event) => {
     game = completeOrder(game, id);
     if (game.fish !== beforeFish) {
       setToast('Заказ выполнен');
+    }
+  }
+
+  if (action === 'claim-daily') {
+    const beforeTokens = game.eventTokens;
+    game = claimDailyReward(game);
+    if (game.eventTokens !== beforeTokens || game.coins !== beforeCoins) {
+      setToast('Ежедневная награда получена');
+    }
+  }
+
+  if (action === 'start-expedition' && id) {
+    game = startExpedition(game, id);
+    if (game.activeExpedition?.id === id) {
+      setToast('Экспедиция отправлена');
+    }
+  }
+
+  if (action === 'claim-expedition') {
+    const beforeExpedition = game.activeExpedition;
+    game = claimExpedition(game);
+    if (beforeExpedition && !game.activeExpedition) {
+      setToast('Экспедиция вернулась с наградой');
     }
   }
 

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Daily reward chest">
+  <defs>
+    <linearGradient id="wood" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#d7853d"/>
+      <stop offset="1" stop-color="#8b4c27"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#ffe98f"/>
+      <stop offset="1" stop-color="#f19b22"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="145%">
+      <feDropShadow dx="0" dy="5" stdDeviation="3" flood-color="#1a2f3b" flood-opacity=".35"/>
+    </filter>
+  </defs>
+  <ellipse cx="64" cy="111" rx="43" ry="9" fill="#12364a" opacity=".26"/>
+  <g filter="url(#shadow)">
+    <path d="M23 51c0-18 13-31 31-31h20c18 0 31 13 31 31v13H23Z" fill="url(#wood)" stroke="#603316" stroke-width="5"/>
+    <path d="M18 55h92v47c0 7-5 12-12 12H30c-7 0-12-5-12-12Z" fill="url(#wood)" stroke="#603316" stroke-width="5"/>
+    <path d="M22 60h84v18H22Z" fill="#63371e" opacity=".45"/>
+    <path d="M18 55h92v14H18Z" fill="url(#gold)" stroke="#8a5519" stroke-width="4"/>
+    <path d="M55 18h18v94H55Z" fill="url(#gold)" stroke="#8a5519" stroke-width="4"/>
+    <rect x="48" y="68" width="32" height="28" rx="8" fill="#ffe7a4" stroke="#8a5519" stroke-width="4"/>
+    <circle cx="64" cy="82" r="6" fill="#c86b18"/>
+    <path d="M43 39c7-8 18-11 31-9" fill="none" stroke="#ffd28a" stroke-width="5" stroke-linecap="round" opacity=".75"/>
+    <path d="M84 44c7-2 14 1 17 7" fill="none" stroke="#ffd28a" stroke-width="4" stroke-linecap="round" opacity=".55"/>
+  </g>
+</svg>

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Expedition map">
+  <defs>
+    <linearGradient id="paper" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#fff4c8"/>
+      <stop offset="1" stop-color="#e7b86c"/>
+    </linearGradient>
+    <linearGradient id="sea" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#5ed7df"/>
+      <stop offset="1" stop-color="#0b7ca0"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="145%">
+      <feDropShadow dx="0" dy="5" stdDeviation="3" flood-color="#1a2f3b" flood-opacity=".35"/>
+    </filter>
+  </defs>
+  <ellipse cx="64" cy="112" rx="43" ry="9" fill="#12364a" opacity=".24"/>
+  <g filter="url(#shadow)">
+    <path d="M21 27c16 8 28 8 43 0 14-8 28-8 43 0v70c-15-8-29-8-43 0-15 8-27 8-43 0Z" fill="url(#paper)" stroke="#7c4c1d" stroke-width="5"/>
+    <path d="M35 48c11-10 24-8 34 2 9 9 20 9 32-2v26c-13 11-25 11-35 1-9-9-20-11-31-2Z" fill="url(#sea)" opacity=".88"/>
+    <path d="M43 39c13 6 28 5 42-1M42 88c14 5 28 4 42-2" fill="none" stroke="#a06a2d" stroke-width="4" stroke-linecap="round" opacity=".55"/>
+    <circle cx="88" cy="58" r="9" fill="#ffcc56" stroke="#8a5519" stroke-width="3"/>
+    <path d="M48 67c8 1 14 6 17 14" fill="none" stroke="#fff7d6" stroke-width="4" stroke-linecap="round" opacity=".75"/>
+    <path d="M75 28v67" stroke="#9a6328" stroke-width="3" opacity=".38"/>
+  </g>
+</svg>

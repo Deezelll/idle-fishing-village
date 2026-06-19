@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Pearl tree">
+  <defs>
+    <linearGradient id="medal" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#45c7d5"/>
+      <stop offset="1" stop-color="#086b88"/>
+    </linearGradient>
+    <radialGradient id="pearl" cx=".35" cy=".3" r=".72">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset=".45" stop-color="#f8edff"/>
+      <stop offset="1" stop-color="#cbb8e5"/>
+    </radialGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="145%">
+      <feDropShadow dx="0" dy="5" stdDeviation="3" flood-color="#1a2f3b" flood-opacity=".35"/>
+    </filter>
+  </defs>
+  <ellipse cx="64" cy="112" rx="42" ry="9" fill="#12364a" opacity=".24"/>
+  <g filter="url(#shadow)">
+    <circle cx="64" cy="61" r="47" fill="url(#medal)" stroke="#f2b541" stroke-width="8"/>
+    <path d="M64 82V42M43 70l21-18 21 18M48 50l16-12 16 12" fill="none" stroke="#ffe599" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="64" cy="36" r="11" fill="url(#pearl)" stroke="#f7d9ff" stroke-width="3"/>
+    <circle cx="43" cy="71" r="10" fill="url(#pearl)" stroke="#f7d9ff" stroke-width="3"/>
+    <circle cx="85" cy="71" r="10" fill="url(#pearl)" stroke="#f7d9ff" stroke-width="3"/>
+    <circle cx="48" cy="50" r="8" fill="url(#pearl)" stroke="#f7d9ff" stroke-width="3"/>
+    <circle cx="80" cy="50" r="8" fill="url(#pearl)" stroke="#f7d9ff" stroke-width="3"/>
+    <path d="M38 29c14-12 39-14 55 2" fill="none" stroke="#aef6ff" stroke-width="5" stroke-linecap="round" opacity=".55"/>
+  </g>
+</svg>

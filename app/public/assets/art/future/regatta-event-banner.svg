@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" role="img" aria-label="Future regatta event banner">
+  <defs><linearGradient id="cloth" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#fff4cf"/><stop offset="1" stop-color="#e7b878"/></linearGradient><linearGradient id="sea" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#5fdde4"/><stop offset="1" stop-color="#0b7b98"/></linearGradient><filter id="s" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="8" stdDeviation="5" flood-color="#17323a" flood-opacity=".25"/></filter></defs>
+  <rect width="1200" height="420" fill="#00ff00"/>
+  <g filter="url(#s)">
+    <path d="M106 118h988v190H106Z" fill="url(#cloth)" stroke="#7b4c22" stroke-width="12"/>
+    <path d="M106 118c150-85 832-86 988 0" fill="#f4c977" stroke="#7b4c22" stroke-width="12"/>
+    <path d="M107 264c240 70 714 70 987 0v44H106Z" fill="url(#sea)" opacity=".95"/>
+    <path d="M185 91c70 38 142 39 218 0M438 91c72 38 145 39 220 0M692 91c75 39 149 39 224 0" fill="none" stroke="#e85d45" stroke-width="22"/>
+    <path d="M210 278c78 29 171 25 241-10M711 279c97 31 194 22 277-19" fill="none" stroke="#fff" stroke-width="12" opacity=".75"/>
+    <g transform="translate(72 172)"><path d="M0 82c53 35 159 37 223 0l-20 58c-61 33-139 33-199 0Z" fill="#1599a4" stroke="#57341f" stroke-width="8"/><rect x="82" y="10" width="75" height="74" rx="12" fill="#fff0c7" stroke="#57341f" stroke-width="7"/><path d="M98 31h20M132 31h20" stroke="#2b7890" stroke-width="9" stroke-linecap="round"/><path d="M77 -3c42 8 77 7 112-2" stroke="#f2b541" stroke-width="8"/></g>
+    <g transform="translate(907 172)"><path d="M0 82c53 35 159 37 223 0l-20 58c-61 33-139 33-199 0Z" fill="#1599a4" stroke="#57341f" stroke-width="8"/><rect x="82" y="10" width="75" height="74" rx="12" fill="#fff0c7" stroke="#57341f" stroke-width="7"/><path d="M98 31h20M132 31h20" stroke="#2b7890" stroke-width="9" stroke-linecap="round"/><path d="M77 -3c42 8 77 7 112-2" stroke="#f2b541" stroke-width="8"/></g>
+  </g>
+</svg>

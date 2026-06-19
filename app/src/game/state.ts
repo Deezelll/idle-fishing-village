@@ -1,4 +1,10 @@
 import { BALANCE, BOATS, BUILDINGS, FISH, ZONES, upgradeCost, type BoatId, type BuildingId, type FishId, type ZoneId } from './balance';
+import {
+  EXPEDITIONS,
+  getAquariumSetBonus,
+  getDailyRewardStatus,
+  getPearlTreeBonus
+} from './progression';
 
 export type Order = {
   id: string;
@@ -16,6 +22,16 @@ export type GameState = {
   pearls: number;
   stars: number;
   festivalCount: number;
+  dailyReward: {
+    streak: number;
+    claimedDate: string;
+  };
+  activeExpedition: {
+    id: string;
+    startedAt: number;
+    endsAt: number;
+  } | null;
+  eventTokens: number;
   boats: Record<BoatId, number>;
   buildings: Record<BuildingId, number>;
   unlockedZones: ZoneId[];
@@ -47,6 +63,12 @@ export function createInitialState(now = Date.now(), pearls = 0, festivalCount =
     pearls,
     stars: 0,
     festivalCount,
+    dailyReward: {
+      streak: 0,
+      claimedDate: ''
+    },
+    activeExpedition: null,
+    eventTokens: 0,
     boats: {
       rowboat: 1,
       motorboat: 0,
@@ -91,6 +113,12 @@ export function normalizeState(value: Partial<GameState> | null | undefined): Ga
     pearls: clampNumber(value.pearls, 0, Number.MAX_SAFE_INTEGER),
     stars: clampNumber(value.stars, 0, Number.MAX_SAFE_INTEGER),
     festivalCount: clampNumber(value.festivalCount, 0, Number.MAX_SAFE_INTEGER),
+    dailyReward: {
+      streak: clampNumber(value.dailyReward?.streak, 0, 0),
+      claimedDate: typeof value.dailyReward?.claimedDate === 'string' ? value.dailyReward.claimedDate : ''
+    },
+    activeExpedition: normalizeExpedition(value.activeExpedition),
+    eventTokens: clampNumber(value.eventTokens, 0, 0),
     boats: { ...initial.boats, ...value.boats },
     buildings: { ...initial.buildings, ...value.buildings },
     unlockedZones: Array.from(new Set([...(value.unlockedZones ?? ['quiet_bay']), 'quiet_bay'])) as ZoneId[],
@@ -107,9 +135,12 @@ export function getStats(state: GameState, zoneId?: ZoneId): DerivedStats {
   const activeZone = zoneId ?? getBestUnlockedZone(state);
   const unlockedFish = FISH.filter((fish) => state.unlockedZones.includes(fish.zone));
   const uniqueFish = FISH.filter((fish) => state.collection[fish.id] > 0).length;
-  const collectionBonus = Math.min(1.42, 1 + uniqueFish * BALANCE.aquariumCollectionBonus * Math.max(1, state.buildings.aquarium + 1));
-  const pearlProductionBonus = Math.min(2.35, 1 + state.pearls * BALANCE.pearlProductionBonus);
-  const pearlPriceBonus = Math.min(2.1, 1 + state.pearls * BALANCE.pearlPriceBonus);
+  const aquariumSetBonus = getAquariumSetBonus(state);
+  const pearlTreeBonus = getPearlTreeBonus(state);
+  const collectionBase = 1 + uniqueFish * BALANCE.aquariumCollectionBonus * Math.max(1, state.buildings.aquarium + 1);
+  const collectionBonus = Math.min(1.72, collectionBase * aquariumSetBonus.productionMultiplier);
+  const pearlProductionBonus = Math.min(2.75, (1 + state.pearls * BALANCE.pearlProductionBonus) * pearlTreeBonus.productionMultiplier);
+  const pearlPriceBonus = Math.min(2.45, (1 + state.pearls * BALANCE.pearlPriceBonus) * pearlTreeBonus.priceMultiplier * aquariumSetBonus.priceMultiplier);
   const pierBonus = Math.min(1.55, 1 + Math.max(0, state.buildings.pier - 1) * BALANCE.pierFleetBonus);
   const activeBoats = getZoneBoatIds(activeZone);
   const workshopLevels = activeBoats.reduce((sum, id) => sum + state.boats[id], 0);
@@ -127,7 +158,7 @@ export function getStats(state: GameState, zoneId?: ZoneId): DerivedStats {
   return {
     fishPerSecond: rawFishPerSecond * pierBonus * workshopBonus * collectionBonus * pearlProductionBonus * zoneMultiplier,
     fishPrice: BALANCE.baseFishPrice * BALANCE.marketPriceGrowth ** (state.buildings.market - 1) * pearlPriceBonus,
-    storageCapacity: Math.floor(BALANCE.baseStorage * BALANCE.warehouseGrowth ** (state.buildings.warehouse - 1)),
+    storageCapacity: Math.floor(BALANCE.baseStorage * BALANCE.warehouseGrowth ** (state.buildings.warehouse - 1) * pearlTreeBonus.storageMultiplier),
     unlockedFish,
     uniqueFish,
     collectionBonus,
@@ -271,6 +302,74 @@ export function completeOrder(state: GameState, id: string): GameState {
   });
 }
 
+export function claimDailyReward(state: GameState, now = Date.now()): GameState {
+  const status = getDailyRewardStatus(state, now);
+
+  if (status.claimed) {
+    return state;
+  }
+
+  const stats = getStats(state);
+
+  return {
+    ...state,
+    fish: Math.min(stats.storageCapacity, state.fish + status.reward.fish),
+    coins: state.coins + status.reward.coins,
+    pearls: state.pearls + status.reward.pearls,
+    stars: state.stars + status.reward.stars,
+    eventTokens: state.eventTokens + status.reward.eventTokens,
+    dailyReward: {
+      streak: state.dailyReward.streak + 1,
+      claimedDate: status.dateKey
+    }
+  };
+}
+
+export function startExpedition(state: GameState, id: string, now = Date.now()): GameState {
+  const expedition = EXPEDITIONS.find((item) => item.id === id);
+
+  if (!expedition || state.activeExpedition || state.buildings.lighthouse < expedition.requiredLighthouse || state.coins < expedition.costCoins) {
+    return state;
+  }
+
+  return {
+    ...state,
+    coins: state.coins - expedition.costCoins,
+    activeExpedition: {
+      id: expedition.id,
+      startedAt: now,
+      endsAt: now + expedition.durationSeconds * 1000
+    }
+  };
+}
+
+export function claimExpedition(state: GameState, now = Date.now()): GameState {
+  if (!state.activeExpedition || now < state.activeExpedition.endsAt) {
+    return state;
+  }
+
+  const expedition = EXPEDITIONS.find((item) => item.id === state.activeExpedition?.id);
+  if (!expedition) {
+    return {
+      ...state,
+      activeExpedition: null
+    };
+  }
+
+  const stats = getStats(state, expedition.zone);
+  const rewarded: GameState = {
+    ...state,
+    fish: Math.min(stats.storageCapacity, state.fish + expedition.reward.fish),
+    coins: state.coins + expedition.reward.coins,
+    stars: state.stars + expedition.reward.stars,
+    pearls: state.pearls + expedition.reward.pearls,
+    eventTokens: state.eventTokens + expedition.reward.eventTokens,
+    activeExpedition: null
+  };
+
+  return collectFishSamples(rewarded, expedition.reward.collectionSamples, expedition.zone);
+}
+
 export function runFestival(state: GameState): GameState {
   if (!canRunFestival(state)) {
     return state;
@@ -392,4 +491,21 @@ function clampNumber(value: unknown, min: number, fallback: number): number {
   }
 
   return Math.max(min, number);
+}
+
+function normalizeExpedition(value: unknown): GameState['activeExpedition'] {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const expedition = value as Partial<NonNullable<GameState['activeExpedition']>>;
+  if (!expedition.id || !EXPEDITIONS.some((item) => item.id === expedition.id)) {
+    return null;
+  }
+
+  return {
+    id: expedition.id,
+    startedAt: clampNumber(expedition.startedAt, 0, Date.now()),
+    endsAt: clampNumber(expedition.endsAt, 0, Date.now())
+  };
 }
