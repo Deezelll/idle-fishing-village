@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "tsc && vite build",
-    "build:yandex": "tsc && vite build",
+    "build": "npm run build:mobile",
+    "build:mobile": "tsc && vite build --mode mobile",
+    "build:yandex": "tsc && vite build --mode yandex",
     "preview": "vite preview --host 127.0.0.1",
     "cap:add:android": "cap add android",
     "cap:sync": "cap sync",

@@ -2,7 +2,7 @@
 
 ## Build
 
-Run from `app/`:
+Run the Yandex Games build from `app/`:
 
 ```bash
 npm run build:yandex
@@ -10,9 +10,19 @@ npm run build:yandex
 
 Upload the generated `app/dist/` contents to Yandex Games.
 
+The mobile / Google Play WebView build is separate:
+
+```bash
+npm run build:mobile
+```
+
+Use `npm run build:mobile` before Capacitor sync/open steps.
+
 ## Platform integration
 
-- The game loads the Yandex Games SDK from `/sdk.js` only outside local `localhost` runtime.
+- The Yandex build is enabled by `VITE_GAME_TARGET=yandex`.
+- The mobile build is enabled by `VITE_GAME_TARGET=mobile` and does not load the Yandex SDK.
+- The game loads the Yandex Games SDK from `/sdk.js` only in the Yandex build and only outside local `localhost` runtime.
 - Local dev and preview continue to work without the SDK.
 - On Yandex Games, the game calls:
   - `YaGames.init()`

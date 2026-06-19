@@ -3,6 +3,7 @@ import type { GameState } from '../game/state';
 
 const SDK_SRC = '/sdk.js';
 const CLOUD_SAVE_KEY = 'idleFishingVillageSaveV2';
+const IS_YANDEX_BUILD = import.meta.env.VITE_GAME_TARGET === 'yandex';
 
 type YandexPlayer = {
   getData(keys?: string[]): Promise<Record<string, unknown>>;
@@ -42,6 +43,10 @@ function isLocalRuntime(): boolean {
 }
 
 function loadSdkScript(): Promise<void> {
+  if (!IS_YANDEX_BUILD) {
+    return Promise.reject(new Error('Yandex Games SDK is disabled for this build target.'));
+  }
+
   if (window.YaGames) {
     return Promise.resolve();
   }
