@@ -25,20 +25,33 @@ export function loadState(): GameState {
   }
 
   try {
-    return normalizeState(JSON.parse(raw) as Partial<GameState>);
+    return parseSerializedState(raw) ?? createInitialState();
   } catch {
     return createInitialState();
   }
 }
 
+export function parseSerializedState(raw: string | null | undefined): GameState | null {
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    return normalizeState(JSON.parse(raw) as Partial<GameState>);
+  } catch {
+    return null;
+  }
+}
+
+export function serializeState(state: GameState): string {
+  return JSON.stringify({
+    ...state,
+    lastSavedAt: Date.now()
+  });
+}
+
 export function saveState(state: GameState): void {
-  localStorage.setItem(
-    SAVE_KEY,
-    JSON.stringify({
-      ...state,
-      lastSavedAt: Date.now()
-    })
-  );
+  localStorage.setItem(SAVE_KEY, serializeState(state));
 }
 
 export function resetState(): GameState {

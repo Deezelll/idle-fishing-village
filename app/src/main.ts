@@ -19,6 +19,7 @@ import {
   type GameState
 } from './game/state';
 import { loadState, resetState, saveState } from './game/storage';
+import { flushCloudState, gameplayStart, gameplayStop, loadCloudState, markGameReady, saveCloudState } from './platform/yandex';
 
 type TabId = 'harbor' | 'upgrades' | 'sea' | 'orders' | 'collection' | 'festival';
 type OverlayId = 'map' | 'orders' | 'collection' | 'festival';
@@ -48,7 +49,7 @@ game = offline.state;
 if (offline.offlineFish >= 1) {
   toast = `Оффлайн улов: +${formatNumber(offline.offlineFish)} рыбы`;
 }
-saveState(game);
+persistState();
 
 function loadUserSettings(): UserSettings {
   const fallback: UserSettings = {
@@ -102,6 +103,46 @@ function applyUserSettings(): void {
     userSettings.animations ? '' : 'reduce-motion',
     userSettings.compactHud ? 'compact-hud-mode' : ''
   ].filter(Boolean).join(' ');
+}
+
+function persistState(flushCloud = false): void {
+  saveState(game);
+  saveCloudState(game);
+
+  if (flushCloud) {
+    void flushCloudState(game);
+  }
+}
+
+function getStateProgressScore(state: GameState): number {
+  const boatScore = Object.values(state.boats).reduce((sum, level) => sum + level, 0) * 250;
+  const buildingScore = Object.values(state.buildings).reduce((sum, level) => sum + level, 0) * 220;
+  return (
+    state.coins +
+    state.fish +
+    state.pearls * 10000 +
+    state.stars * 600 +
+    state.completedOrders * 180 +
+    state.unlockedZones.length * 4000 +
+    state.festivalCount * 6000 +
+    boatScore +
+    buildingScore
+  );
+}
+
+async function hydrateFromYandexCloud(): Promise<void> {
+  const cloudState = await loadCloudState();
+
+  if (!cloudState || getStateProgressScore(cloudState) <= getStateProgressScore(game)) {
+    return;
+  }
+
+  const cloudOffline = applyOfflineIncome(cloudState);
+  game = cloudOffline.state;
+  ensureActiveZone();
+  persistState(true);
+  setToast('Прогресс загружен из Яндекс Игр');
+  render();
 }
 
 function asset(name: string): string {
@@ -837,7 +878,7 @@ appRoot.addEventListener('click', (event) => {
       setActiveZone('quiet_bay');
       settingsOpen = false;
       setToast('Прогресс сброшен');
-      saveState(game);
+      persistState(true);
       render();
     }
     return;
@@ -894,20 +935,27 @@ appRoot.addEventListener('click', (event) => {
     }
   }
 
-  saveState(game);
+  persistState();
   render();
 });
 
 window.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') {
-    saveState(game);
+    gameplayStop();
+    persistState(true);
+    return;
   }
+
+  gameplayStart();
 });
 
 setInterval(() => {
   game = applyIncome(game, 1, true, activeZone);
-  saveState(game);
+  persistState();
   refreshDynamicUi();
 }, 1000);
 
 render();
+markGameReady();
+gameplayStart();
+void hydrateFromYandexCloud();
