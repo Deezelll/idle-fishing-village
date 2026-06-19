@@ -1,6 +1,6 @@
 import './styles.css';
 import { BOATS, BUILDINGS, FISH, ZONES, type BoatId, type BuildingId, type ZoneId } from './game/balance';
-import { ZONE_SCENES, type BoatSlotConfig, type ZoneSceneConfig } from './game/scene';
+import { ZONE_SCENES, type BoatSlotConfig, type SceneLabelConfig, type ZoneSceneConfig } from './game/scene';
 import {
   applyIncome,
   applyOfflineIncome,
@@ -262,6 +262,10 @@ function renderSceneOverlay(): string {
       <span class="gull gull-a"></span>
       <span class="gull gull-b"></span>
     </div>
+    <div class="scene-markers" aria-hidden="true">
+      ${renderBuildingLabels(scene)}
+      ${renderBoatLabels(scene)}
+    </div>
     <div class="side-actions">
       <button data-action="open-overlay" data-overlay="festival"><img src="${iconAsset('ticket')}" alt="" /><span>Событие</span></button>
       <button data-action="open-overlay" data-overlay="collection"><img src="${iconAsset('aquarium')}" alt="" /><span>Достижения</span></button>
@@ -269,6 +273,55 @@ function renderSceneOverlay(): string {
       <button data-action="open-overlay" data-overlay="map"><img src="${iconAsset('map')}" alt="" /><span>Карта</span></button>
     </div>
   `;
+}
+
+function renderBuildingLabels(scene: ZoneSceneConfig): string {
+  return Object.values(scene.labels)
+    .filter((label) => label.buildingId && game.buildings[label.buildingId] > 0)
+    .map((label) => renderBuildingLabel(label))
+    .join('');
+}
+
+function renderBuildingLabel(label: SceneLabelConfig): string {
+  const buildingId = label.buildingId!;
+  const level = game.buildings[buildingId];
+  const anchor = label.style.includes('right:') ? 'right' : 'left';
+  const wideClass = label.wide ? ' scene-label-wide' : '';
+
+  return `
+    <div class="scene-label scene-label-building${wideClass}" data-anchor="${anchor}" style="${label.style}">
+      <strong>${label.title}</strong>
+      <span>Ур. ${level}</span>
+    </div>
+  `;
+}
+
+function renderBoatLabels(scene: ZoneSceneConfig): string {
+  return scene.boats
+    .filter((slot) => slot.labelStyle && game.boats[slot.boatId] > 0)
+    .map((slot) => renderBoatLabel(slot))
+    .join('');
+}
+
+function renderBoatLabel(slot: BoatSlotConfig): string {
+  const level = game.boats[slot.boatId];
+  const anchor = slot.labelStyle!.includes('right:') ? 'right' : 'left';
+
+  return `
+    <div class="scene-label scene-label-boat" data-anchor="${anchor}" style="${slot.labelStyle}">
+      <strong>${boatSceneName(slot.boatId)}</strong>
+      <span>Ур. ${level}</span>
+    </div>
+  `;
+}
+
+function boatSceneName(id: BoatId): string {
+  const boat = BOATS.find((item) => item.id === id);
+  if (!boat) {
+    return id;
+  }
+
+  return boat.name.split(' ')[0] ?? boat.name;
 }
 
 function renderSceneBoats(scene: ZoneSceneConfig): string {

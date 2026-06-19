@@ -462,6 +462,42 @@ h2 {
   transform: translate(-50%, -50%);
   text-align: center;
   filter: drop-shadow(0 4px 3px rgb(0 0 0 / 32%));
+  pointer-events: none;
+}
+
+.scene-markers {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.scene-label-building {
+  z-index: 2;
+}
+
+.scene-label-wide {
+  width: 104px;
+}
+
+.scene-label-wide strong {
+  font-size: 0.6rem;
+  line-height: 1.05;
+  padding: 4px 4px;
+}
+
+.scene-label-boat {
+  width: 76px;
+  z-index: 4;
+  transform: translate(-50%, -88%);
+}
+
+.scene-label[data-anchor='right'] {
+  transform: translate(50%, -50%);
+}
+
+.scene-label-boat[data-anchor='right'] {
+  transform: translate(50%, -88%);
 }
 
 .task-board,
