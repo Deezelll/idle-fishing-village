@@ -8,7 +8,9 @@ import {
   buyBuilding,
   canRunFestival,
   claimDailyReward,
+  claimEventReward,
   claimExpedition,
+  claimMilestoneReward,
   completeOrder,
   getBoatCost,
   getBuildingCost,
@@ -23,12 +25,16 @@ import {
 } from './game/state';
 import {
   AQUARIUM_SETS,
+  EVENT_REWARDS,
   EXPEDITIONS,
   getAquariumSetBonus,
+  getAvailableEventRewards,
   getChapterGoals,
   getCurrentChapterGoal,
   getDailyRewardStatus,
+  getAvailableMilestones,
   getExpeditionProgress,
+  getMilestoneBonus,
   getPearlTreeBonus,
   getZoneMastery
 } from './game/progression';
@@ -618,6 +624,7 @@ function renderUpgrades(): string {
     <div class="upgrade-list">
       ${BUILDINGS.map(renderBuildingUpgrade).join('')}
     </div>
+    ${renderMilestoneRewards()}
   `;
 }
 
@@ -654,6 +661,42 @@ function renderBuildingUpgrade(building: (typeof BUILDINGS)[number]): string {
       <b>Ур. ${level}</b>
       <small>${formatNumber(cost)} монет</small>
     </button>
+  `;
+}
+
+function renderMilestoneRewards(): string {
+  const milestones = getAvailableMilestones(game).slice(0, 4);
+  const bonus = getMilestoneBonus(game);
+
+  return `
+    <div class="progress-panel milestone-panel">
+      <div class="section-title compact">
+        <div>
+          <span>Награды за прогресс</span>
+          <h2>${milestones.length > 0 ? 'Можно забрать' : 'Следи за порогами'}</h2>
+        </div>
+        <strong>${bonus.claimedCount} получено</strong>
+      </div>
+      <div class="stat-grid milestone-bonus">
+        ${miniStat('Добыча', `x${bonus.productionMultiplier.toFixed(2)}`)}
+        ${miniStat('Цена', `x${bonus.priceMultiplier.toFixed(2)}`)}
+      </div>
+      ${milestones.length > 0 ? `
+        <div class="milestone-list">
+          ${milestones.map((milestone) => `
+            <article class="milestone-card">
+              <img src="${asset(milestone.kind === 'boat' ? 'future/boats-levels-sheet.svg' : 'future/reward-vfx-sheet.svg')}" alt="" />
+              <div>
+                <strong>${milestone.title}</strong>
+                <p>${milestone.description}</p>
+                <span>+${formatNumber(milestone.reward.coins)} монет · +${milestone.reward.stars} зв. · +${milestone.reward.eventTokens} жет.</span>
+              </div>
+              <button data-action="claim-milestone" data-id="${milestone.id}">Забрать</button>
+            </article>
+          `).join('')}
+        </div>
+      ` : '<p>Первые пороги открываются на 5 уровне лодок или зданий.</p>'}
+    </div>
   `;
 }
 
@@ -841,6 +884,7 @@ function renderFestival(): string {
       <strong>${game.festivalCount} раз</strong>
     </div>
     ${renderDailyReward()}
+    ${renderRegattaShop()}
     <article class="festival-card">
       <img src="${iconAsset('ticket')}" alt="" />
       <div>
@@ -856,6 +900,48 @@ function renderFestival(): string {
       ${miniStat('Бонус цены', `x${stats.pearlPriceBonus.toFixed(2)}`)}
     </div>
     ${renderPearlTree()}
+  `;
+}
+
+function renderRegattaShop(): string {
+  const availableIds = new Set(getAvailableEventRewards(game).map((reward) => reward.id));
+
+  return `
+    <div class="progress-panel event-shop">
+      <div class="section-title compact">
+        <div>
+          <span>Событие</span>
+          <h2>Регата гавани</h2>
+        </div>
+        <strong>${formatNumber(game.eventTokens)} жет.</strong>
+      </div>
+      <div class="event-reward-list">
+        ${EVENT_REWARDS.map((reward) => {
+          const claimed = game.claimedEventRewards.includes(reward.id);
+          const canClaim = availableIds.has(reward.id);
+          const rewardText = [
+            `+${formatNumber(reward.reward.coins)} монет`,
+            `+${formatNumber(reward.reward.fish)} рыбы`,
+            reward.reward.stars ? `+${reward.reward.stars} зв.` : '',
+            reward.reward.pearls ? `+${reward.reward.pearls} жемч.` : ''
+          ].filter(Boolean).join(' · ');
+
+          return `
+            <article class="event-reward-card ${claimed ? 'claimed' : ''}">
+              <img src="${asset(reward.icon)}" alt="" />
+              <div>
+                <strong>${reward.title}</strong>
+                <p>${reward.description}</p>
+                <span>${rewardText}</span>
+              </div>
+              <button data-action="claim-event-reward" data-id="${reward.id}" ${canClaim ? '' : 'disabled'}>
+                ${claimed ? 'Получено' : `${reward.costTokens} жет.`}
+              </button>
+            </article>
+          `;
+        }).join('')}
+      </div>
+    </div>
   `;
 }
 
@@ -1114,6 +1200,22 @@ appRoot.addEventListener('click', (event) => {
     game = claimExpedition(game);
     if (beforeExpedition && !game.activeExpedition) {
       setToast('Экспедиция вернулась с наградой');
+    }
+  }
+
+  if (action === 'claim-milestone' && id) {
+    const beforeMilestones = game.claimedMilestones.length;
+    game = claimMilestoneReward(game, id);
+    if (game.claimedMilestones.length > beforeMilestones) {
+      setToast('Награда за прогресс получена');
+    }
+  }
+
+  if (action === 'claim-event-reward' && id) {
+    const beforeEventRewards = game.claimedEventRewards.length;
+    game = claimEventReward(game, id);
+    if (game.claimedEventRewards.length > beforeEventRewards) {
+      setToast('Награда регаты получена');
     }
   }
 

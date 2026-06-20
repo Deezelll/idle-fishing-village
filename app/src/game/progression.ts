@@ -1,4 +1,4 @@
-import { BOATS, FISH, ZONES, type BoatId, type FishId, type ZoneId } from './balance';
+import { BOATS, BUILDINGS, FISH, ZONES, type BoatId, type BuildingId, type FishId, type ZoneId } from './balance';
 import type { GameState } from './state';
 
 export type DailyReward = {
@@ -83,6 +83,41 @@ export type ChapterGoal = {
   current: number;
   target: number;
   reward: string;
+};
+
+export type MilestoneReward = {
+  coins: number;
+  fish: number;
+  stars: number;
+  pearls: number;
+  eventTokens: number;
+};
+
+export type MilestoneConfig = {
+  id: string;
+  kind: 'boat' | 'building';
+  targetId: BoatId | BuildingId;
+  level: number;
+  title: string;
+  description: string;
+  reward: MilestoneReward;
+  claimed: boolean;
+};
+
+export type MilestoneBonus = {
+  claimedCount: number;
+  productionMultiplier: number;
+  priceMultiplier: number;
+};
+
+export type EventRewardConfig = {
+  id: string;
+  title: string;
+  description: string;
+  costTokens: number;
+  icon: string;
+  reward: MilestoneReward;
+  claimed: boolean;
 };
 
 export const DAILY_REWARDS: DailyReward[] = [
@@ -177,6 +212,68 @@ export const AQUARIUM_SETS: AquariumSet[] = [
   }
 ];
 
+const milestoneLevels = [5, 10, 25] as const;
+
+export const MILESTONE_REWARDS: Omit<MilestoneConfig, 'claimed'>[] = [
+  ...BOATS.flatMap((boat) => milestoneLevels.map((level) => ({
+    id: `boat-${boat.id}-${level}`,
+    kind: 'boat' as const,
+    targetId: boat.id,
+    level,
+    title: `${boat.name} ур. ${level}`,
+    description: `Порог флота: прокачай ${boat.name.toLowerCase()} до ${level} уровня.`,
+    reward: {
+      coins: level * 80,
+      fish: level * 18,
+      stars: level >= 10 ? 2 : 1,
+      pearls: level >= 25 ? 1 : 0,
+      eventTokens: level * 3
+    }
+  }))),
+  ...BUILDINGS.flatMap((building) => milestoneLevels.map((level) => ({
+    id: `building-${building.id}-${level}`,
+    kind: 'building' as const,
+    targetId: building.id,
+    level,
+    title: `${building.name} ур. ${level}`,
+    description: `Порог деревни: улучши ${building.name.toLowerCase()} до ${level} уровня.`,
+    reward: {
+      coins: level * 95,
+      fish: level * 12,
+      stars: level >= 10 ? 2 : 1,
+      pearls: level >= 25 ? 1 : 0,
+      eventTokens: level * 4
+    }
+  })))
+];
+
+export const EVENT_REWARDS: Omit<EventRewardConfig, 'claimed'>[] = [
+  {
+    id: 'regatta_supply_chest',
+    title: 'Сундук снабжения',
+    description: 'Быстрый запас для следующего рывка гавани.',
+    costTokens: 35,
+    icon: 'future/reward-vfx-sheet.svg',
+    reward: { coins: 1200, fish: 220, stars: 2, pearls: 0, eventTokens: 0 }
+  },
+  {
+    id: 'regatta_pearl_prize',
+    title: 'Жемчужный приз',
+    description: 'Редкая награда регаты для постоянного прогресса.',
+    costTokens: 80,
+    icon: '3d/icon-pearl-tree.svg',
+    reward: { coins: 900, fish: 120, stars: 2, pearls: 1, eventTokens: 0 }
+  },
+  {
+    id: 'regatta_captain_bonus',
+    title: 'Капитанский бонус',
+    description: 'Набор для ускорения заказов и фестивального темпа.',
+    costTokens: 120,
+    icon: 'future/regatta-event-banner.svg',
+    reward: { coins: 2400, fish: 360, stars: 4, pearls: 1, eventTokens: 0 }
+  }
+];
+
 export function getDateKey(now = Date.now()): string {
   return new Date(now).toISOString().slice(0, 10);
 }
@@ -257,6 +354,48 @@ export function getPearlTreeBonus(state: GameState): PearlTreeBonus {
     storageMultiplier: 1 + Math.floor(unlockedNodes / 3) * 0.04,
     offlineHoursBonus: Math.floor(unlockedNodes / 4)
   };
+}
+
+export function getAvailableMilestones(state: GameState): MilestoneConfig[] {
+  return MILESTONE_REWARDS
+    .filter((milestone) => {
+      const level = milestone.kind === 'boat'
+        ? state.boats[milestone.targetId as BoatId]
+        : state.buildings[milestone.targetId as BuildingId];
+
+      return level >= milestone.level && !state.claimedMilestones.includes(milestone.id);
+    })
+    .map((milestone) => ({
+      ...milestone,
+      claimed: state.claimedMilestones.includes(milestone.id)
+    }));
+}
+
+export function getMilestoneById(id: string): Omit<MilestoneConfig, 'claimed'> | undefined {
+  return MILESTONE_REWARDS.find((milestone) => milestone.id === id);
+}
+
+export function getMilestoneBonus(state: GameState): MilestoneBonus {
+  const claimedCount = state.claimedMilestones.length;
+
+  return {
+    claimedCount,
+    productionMultiplier: 1 + claimedCount * 0.012,
+    priceMultiplier: 1 + Math.floor(claimedCount / 2) * 0.008
+  };
+}
+
+export function getAvailableEventRewards(state: GameState): EventRewardConfig[] {
+  return EVENT_REWARDS
+    .filter((reward) => state.eventTokens >= reward.costTokens && !state.claimedEventRewards.includes(reward.id))
+    .map((reward) => ({
+      ...reward,
+      claimed: state.claimedEventRewards.includes(reward.id)
+    }));
+}
+
+export function getEventRewardById(id: string): Omit<EventRewardConfig, 'claimed'> | undefined {
+  return EVENT_REWARDS.find((reward) => reward.id === id);
 }
 
 export function getChapterGoals(state: GameState): ChapterGoal[] {

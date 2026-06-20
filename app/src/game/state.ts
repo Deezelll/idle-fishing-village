@@ -3,6 +3,9 @@ import {
   EXPEDITIONS,
   getAquariumSetBonus,
   getDailyRewardStatus,
+  getEventRewardById,
+  getMilestoneBonus,
+  getMilestoneById,
   getPearlTreeBonus
 } from './progression';
 
@@ -32,6 +35,8 @@ export type GameState = {
     endsAt: number;
   } | null;
   eventTokens: number;
+  claimedEventRewards: string[];
+  claimedMilestones: string[];
   boats: Record<BoatId, number>;
   buildings: Record<BuildingId, number>;
   unlockedZones: ZoneId[];
@@ -69,6 +74,8 @@ export function createInitialState(now = Date.now(), pearls = 0, festivalCount =
     },
     activeExpedition: null,
     eventTokens: 0,
+    claimedEventRewards: [],
+    claimedMilestones: [],
     boats: {
       rowboat: 1,
       motorboat: 0,
@@ -119,6 +126,8 @@ export function normalizeState(value: Partial<GameState> | null | undefined): Ga
     },
     activeExpedition: normalizeExpedition(value.activeExpedition),
     eventTokens: clampNumber(value.eventTokens, 0, 0),
+    claimedEventRewards: Array.isArray(value.claimedEventRewards) ? value.claimedEventRewards.filter((id): id is string => typeof id === 'string') : [],
+    claimedMilestones: Array.isArray(value.claimedMilestones) ? value.claimedMilestones.filter((id): id is string => typeof id === 'string') : [],
     boats: { ...initial.boats, ...value.boats },
     buildings: { ...initial.buildings, ...value.buildings },
     unlockedZones: Array.from(new Set([...(value.unlockedZones ?? ['quiet_bay']), 'quiet_bay'])) as ZoneId[],
@@ -136,6 +145,7 @@ export function getStats(state: GameState, zoneId?: ZoneId): DerivedStats {
   const unlockedFish = FISH.filter((fish) => state.unlockedZones.includes(fish.zone));
   const uniqueFish = FISH.filter((fish) => state.collection[fish.id] > 0).length;
   const aquariumSetBonus = getAquariumSetBonus(state);
+  const milestoneBonus = getMilestoneBonus(state);
   const pearlTreeBonus = getPearlTreeBonus(state);
   const collectionBase = 1 + uniqueFish * BALANCE.aquariumCollectionBonus * Math.max(1, state.buildings.aquarium + 1);
   const collectionBonus = Math.min(1.72, collectionBase * aquariumSetBonus.productionMultiplier);
@@ -156,8 +166,8 @@ export function getStats(state: GameState, zoneId?: ZoneId): DerivedStats {
   }, 0);
 
   return {
-    fishPerSecond: rawFishPerSecond * pierBonus * workshopBonus * collectionBonus * pearlProductionBonus * zoneMultiplier,
-    fishPrice: BALANCE.baseFishPrice * BALANCE.marketPriceGrowth ** (state.buildings.market - 1) * pearlPriceBonus,
+    fishPerSecond: rawFishPerSecond * pierBonus * workshopBonus * collectionBonus * pearlProductionBonus * milestoneBonus.productionMultiplier * zoneMultiplier,
+    fishPrice: BALANCE.baseFishPrice * BALANCE.marketPriceGrowth ** (state.buildings.market - 1) * pearlPriceBonus * milestoneBonus.priceMultiplier,
     storageCapacity: Math.floor(BALANCE.baseStorage * BALANCE.warehouseGrowth ** (state.buildings.warehouse - 1) * pearlTreeBonus.storageMultiplier),
     unlockedFish,
     uniqueFish,
@@ -368,6 +378,54 @@ export function claimExpedition(state: GameState, now = Date.now()): GameState {
   };
 
   return collectFishSamples(rewarded, expedition.reward.collectionSamples, expedition.zone);
+}
+
+export function claimMilestoneReward(state: GameState, id: string): GameState {
+  const milestone = getMilestoneById(id);
+
+  if (!milestone || state.claimedMilestones.includes(id)) {
+    return state;
+  }
+
+  const currentLevel = milestone.kind === 'boat'
+    ? state.boats[milestone.targetId as BoatId]
+    : state.buildings[milestone.targetId as BuildingId];
+
+  if (currentLevel < milestone.level) {
+    return state;
+  }
+
+  const stats = getStats(state);
+
+  return {
+    ...state,
+    fish: Math.min(stats.storageCapacity, state.fish + milestone.reward.fish),
+    coins: state.coins + milestone.reward.coins,
+    stars: state.stars + milestone.reward.stars,
+    pearls: state.pearls + milestone.reward.pearls,
+    eventTokens: state.eventTokens + milestone.reward.eventTokens,
+    claimedMilestones: [...state.claimedMilestones, id]
+  };
+}
+
+export function claimEventReward(state: GameState, id: string): GameState {
+  const reward = getEventRewardById(id);
+
+  if (!reward || state.claimedEventRewards.includes(id) || state.eventTokens < reward.costTokens) {
+    return state;
+  }
+
+  const stats = getStats(state);
+
+  return {
+    ...state,
+    fish: Math.min(stats.storageCapacity, state.fish + reward.reward.fish),
+    coins: state.coins + reward.reward.coins,
+    stars: state.stars + reward.reward.stars,
+    pearls: state.pearls + reward.reward.pearls,
+    eventTokens: state.eventTokens - reward.costTokens + reward.reward.eventTokens,
+    claimedEventRewards: [...state.claimedEventRewards, id]
+  };
 }
 
 export function runFestival(state: GameState): GameState {

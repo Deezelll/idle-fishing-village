@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { createInitialState } from './state';
+import { claimEventReward, claimMilestoneReward, createInitialState } from './state';
 import {
+  getAvailableEventRewards,
   getAquariumSetBonus,
+  getAvailableMilestones,
   getChapterGoals,
   getDailyRewardStatus,
+  getMilestoneBonus,
   getPearlTreeBonus,
   getZoneMastery
 } from './progression';
@@ -63,5 +66,67 @@ describe('progression systems', () => {
     expect(goals.length).toBeGreaterThan(0);
     expect(goals[0].current).toBeLessThanOrEqual(goals[0].target);
     expect(goals.some((goal) => goal.id === 'unlock_coral_reef')).toBe(true);
+  });
+
+  it('exposes claimable milestone rewards for upgraded boats and buildings', () => {
+    const state = createInitialState();
+    state.boats.rowboat = 5;
+    state.buildings.market = 5;
+
+    const milestones = getAvailableMilestones(state);
+
+    expect(milestones.map((milestone) => milestone.id)).toContain('boat-rowboat-5');
+    expect(milestones.map((milestone) => milestone.id)).toContain('building-market-5');
+    expect(milestones.every((milestone) => milestone.claimed === false)).toBe(true);
+  });
+
+  it('claims a milestone once and records the reward', () => {
+    const state = createInitialState();
+    state.boats.rowboat = 5;
+
+    const claimed = claimMilestoneReward(state, 'boat-rowboat-5');
+    const claimedAgain = claimMilestoneReward(claimed, 'boat-rowboat-5');
+
+    expect(claimed.claimedMilestones).toContain('boat-rowboat-5');
+    expect(claimed.stars).toBeGreaterThan(state.stars);
+    expect(claimed.eventTokens).toBeGreaterThan(state.eventTokens);
+    expect(claimedAgain.stars).toBe(claimed.stars);
+    expect(claimedAgain.eventTokens).toBe(claimed.eventTokens);
+  });
+
+  it('turns claimed milestone count into a small passive production bonus', () => {
+    const state = createInitialState();
+    state.claimedMilestones = ['boat-rowboat-5', 'building-market-5', 'boat-motorboat-10'];
+
+    const bonus = getMilestoneBonus(state);
+
+    expect(bonus.claimedCount).toBe(3);
+    expect(bonus.productionMultiplier).toBeGreaterThan(1);
+    expect(bonus.priceMultiplier).toBeGreaterThan(1);
+  });
+
+  it('exposes event rewards that can be bought with event tokens', () => {
+    const state = createInitialState();
+    state.eventTokens = 80;
+
+    const rewards = getAvailableEventRewards(state);
+
+    expect(rewards.length).toBeGreaterThan(0);
+    expect(rewards.some((reward) => reward.id === 'regatta_supply_chest')).toBe(true);
+    expect(rewards.every((reward) => reward.claimed === false)).toBe(true);
+  });
+
+  it('spends event tokens and prevents duplicate event reward claims', () => {
+    const state = createInitialState();
+    state.eventTokens = 80;
+
+    const claimed = claimEventReward(state, 'regatta_supply_chest');
+    const claimedAgain = claimEventReward(claimed, 'regatta_supply_chest');
+
+    expect(claimed.claimedEventRewards).toContain('regatta_supply_chest');
+    expect(claimed.eventTokens).toBeLessThan(state.eventTokens);
+    expect(claimed.coins).toBeGreaterThan(state.coins);
+    expect(claimedAgain.eventTokens).toBe(claimed.eventTokens);
+    expect(claimedAgain.coins).toBe(claimed.coins);
   });
 });
