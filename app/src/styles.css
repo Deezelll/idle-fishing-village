@@ -1135,6 +1135,12 @@ h2 {
   gap: 8px;
 }
 
+.tutorial-list,
+.regatta-goal-list {
+  display: grid;
+  gap: 8px;
+}
+
 .progress-list {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -1172,6 +1178,43 @@ h2 {
 .bonus-grid .complete {
   border-color: #70c61e;
   background: linear-gradient(#164f47, #083342);
+}
+
+.tutorial-panel {
+  margin-bottom: 10px;
+}
+
+.tutorial-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.tutorial-list article {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px;
+  border: 2px solid #113753;
+  border-radius: 8px;
+  background: linear-gradient(#174b73, #082842);
+}
+
+.tutorial-list article.complete {
+  border-color: #70c61e;
+  background: linear-gradient(#164f47, #083342);
+}
+
+.tutorial-list strong,
+.regatta-goal-card strong {
+  color: #ffffff;
+  font-size: 0.84rem;
+  line-height: 1.12;
+}
+
+.tutorial-list span,
+.regatta-goal-card span {
+  color: #ffdb7d;
+  font-size: 0.72rem;
+  font-weight: 850;
 }
 
 .inline-progress {
@@ -1235,6 +1278,51 @@ h2 {
 
 .event-shop {
   margin-bottom: 10px;
+}
+
+.regatta-goals {
+  margin-bottom: 10px;
+}
+
+.regatta-goal-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 9px;
+  align-items: center;
+  min-width: 0;
+  padding: 9px;
+  border: 2px solid #113753;
+  border-radius: 8px;
+  background: linear-gradient(#174b73, #082842);
+}
+
+.regatta-goal-card.claimed {
+  border-color: #70c61e;
+  background: linear-gradient(#164f47, #083342);
+  opacity: 0.86;
+}
+
+.regatta-goal-card p {
+  margin-top: 3px;
+  color: #d7eef5;
+  font-size: 0.76rem;
+  line-height: 1.28;
+}
+
+.regatta-goal-card .meter {
+  margin: 6px 0 0;
+}
+
+.regatta-goal-card button {
+  min-height: 38px;
+  padding: 0 12px;
+  border: 2px solid #2a6d0f;
+  background: linear-gradient(#8de622, #4fb900);
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 950;
+  text-shadow: 0 1px 0 #1f6400;
+  box-shadow: inset 0 -3px 0 rgb(0 0 0 / 18%);
 }
 
 .event-reward-list {
@@ -1658,6 +1746,7 @@ h2 {
   .expedition-card,
   .expedition-option,
   .event-reward-card,
+  .regatta-goal-card,
   .milestone-card {
     grid-template-columns: 44px 1fr;
   }
@@ -1666,8 +1755,13 @@ h2 {
   .expedition-card button,
   .expedition-option button,
   .event-reward-card button,
+  .regatta-goal-card button,
   .milestone-card button {
     grid-column: 1 / -1;
+  }
+
+  .tutorial-list {
+    grid-template-columns: 1fr;
   }
 
   .shell {

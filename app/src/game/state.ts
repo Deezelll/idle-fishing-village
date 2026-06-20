@@ -6,7 +6,8 @@ import {
   getEventRewardById,
   getMilestoneBonus,
   getMilestoneById,
-  getPearlTreeBonus
+  getPearlTreeBonus,
+  getRegattaGoalById
 } from './progression';
 
 export type Order = {
@@ -37,6 +38,9 @@ export type GameState = {
   eventTokens: number;
   claimedEventRewards: string[];
   claimedMilestones: string[];
+  claimedRegattaGoals: string[];
+  lifetimeFishSold: number;
+  totalUpgradesPurchased: number;
   boats: Record<BoatId, number>;
   buildings: Record<BuildingId, number>;
   unlockedZones: ZoneId[];
@@ -76,6 +80,9 @@ export function createInitialState(now = Date.now(), pearls = 0, festivalCount =
     eventTokens: 0,
     claimedEventRewards: [],
     claimedMilestones: [],
+    claimedRegattaGoals: [],
+    lifetimeFishSold: 0,
+    totalUpgradesPurchased: 0,
     boats: {
       rowboat: 1,
       motorboat: 0,
@@ -128,6 +135,9 @@ export function normalizeState(value: Partial<GameState> | null | undefined): Ga
     eventTokens: clampNumber(value.eventTokens, 0, 0),
     claimedEventRewards: Array.isArray(value.claimedEventRewards) ? value.claimedEventRewards.filter((id): id is string => typeof id === 'string') : [],
     claimedMilestones: Array.isArray(value.claimedMilestones) ? value.claimedMilestones.filter((id): id is string => typeof id === 'string') : [],
+    claimedRegattaGoals: Array.isArray(value.claimedRegattaGoals) ? value.claimedRegattaGoals.filter((id): id is string => typeof id === 'string') : [],
+    lifetimeFishSold: clampNumber(value.lifetimeFishSold, 0, Number.MAX_SAFE_INTEGER),
+    totalUpgradesPurchased: clampNumber(value.totalUpgradesPurchased, 0, Number.MAX_SAFE_INTEGER),
     boats: { ...initial.boats, ...value.boats },
     buildings: { ...initial.buildings, ...value.buildings },
     unlockedZones: Array.from(new Set([...(value.unlockedZones ?? ['quiet_bay']), 'quiet_bay'])) as ZoneId[],
@@ -235,7 +245,8 @@ export function sellFish(state: GameState): GameState {
   return {
     ...state,
     fish: 0,
-    coins: state.coins + earned
+    coins: state.coins + earned,
+    lifetimeFishSold: state.lifetimeFishSold + Math.floor(state.fish)
   };
 }
 
@@ -250,6 +261,7 @@ export function buyBoat(state: GameState, id: BoatId): GameState {
   return {
     ...state,
     coins: state.coins - cost,
+    totalUpgradesPurchased: state.totalUpgradesPurchased + 1,
     boats: {
       ...state.boats,
       [id]: state.boats[id] + 1
@@ -267,6 +279,7 @@ export function buyBuilding(state: GameState, id: BuildingId): GameState {
   return {
     ...state,
     coins: state.coins - cost,
+    totalUpgradesPurchased: state.totalUpgradesPurchased + 1,
     buildings: {
       ...state.buildings,
       [id]: state.buildings[id] + 1
@@ -425,6 +438,20 @@ export function claimEventReward(state: GameState, id: string): GameState {
     pearls: state.pearls + reward.reward.pearls,
     eventTokens: state.eventTokens - reward.costTokens + reward.reward.eventTokens,
     claimedEventRewards: [...state.claimedEventRewards, id]
+  };
+}
+
+export function claimRegattaGoalReward(state: GameState, id: string): GameState {
+  const goal = getRegattaGoalById(id, state);
+
+  if (!goal || !goal.ready || state.claimedRegattaGoals.includes(id)) {
+    return state;
+  }
+
+  return {
+    ...state,
+    eventTokens: state.eventTokens + goal.rewardTokens,
+    claimedRegattaGoals: [...state.claimedRegattaGoals, id]
   };
 }
 

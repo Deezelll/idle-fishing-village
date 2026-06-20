@@ -120,6 +120,25 @@ export type EventRewardConfig = {
   claimed: boolean;
 };
 
+export type RegattaGoalConfig = {
+  id: string;
+  title: string;
+  description: string;
+  current: number;
+  target: number;
+  rewardTokens: number;
+  claimed: boolean;
+  ready: boolean;
+};
+
+export type TutorialStep = {
+  id: string;
+  title: string;
+  description: string;
+  completed: boolean;
+  actionLabel: string;
+};
+
 export const DAILY_REWARDS: DailyReward[] = [
   { day: 1, fish: 30, coins: 80, pearls: 0, stars: 0, eventTokens: 5 },
   { day: 2, fish: 60, coins: 150, pearls: 0, stars: 1, eventTokens: 8 },
@@ -396,6 +415,85 @@ export function getAvailableEventRewards(state: GameState): EventRewardConfig[] 
 
 export function getEventRewardById(id: string): Omit<EventRewardConfig, 'claimed'> | undefined {
   return EVENT_REWARDS.find((reward) => reward.id === id);
+}
+
+export function getRegattaGoals(state: GameState): RegattaGoalConfig[] {
+  const goals: Omit<RegattaGoalConfig, 'claimed' | 'ready'>[] = [
+    {
+      id: 'regatta_orders',
+      title: 'Заказы недели',
+      description: 'Выполни 3 заказа для жителей бухты.',
+      current: Math.min(state.completedOrders, 3),
+      target: 3,
+      rewardTokens: 30
+    },
+    {
+      id: 'regatta_sales',
+      title: 'Большая продажа',
+      description: 'Продай 600 рыбы за неделю регаты.',
+      current: Math.min(state.lifetimeFishSold, 600),
+      target: 600,
+      rewardTokens: 25
+    },
+    {
+      id: 'regatta_upgrades',
+      title: 'Рост гавани',
+      description: 'Купи 4 улучшения лодок или зданий.',
+      current: Math.min(state.totalUpgradesPurchased, 4),
+      target: 4,
+      rewardTokens: 35
+    }
+  ];
+
+  return goals.map((goal) => ({
+    ...goal,
+    claimed: state.claimedRegattaGoals.includes(goal.id),
+    ready: goal.current >= goal.target && !state.claimedRegattaGoals.includes(goal.id)
+  }));
+}
+
+export function getRegattaGoalById(id: string, state: GameState): RegattaGoalConfig | undefined {
+  return getRegattaGoals(state).find((goal) => goal.id === id);
+}
+
+export function getTutorialSteps(state: GameState): TutorialStep[] {
+  return [
+    {
+      id: 'sell_fish',
+      title: 'Продай первый улов',
+      description: 'Накопи рыбу и нажми продажу, чтобы получить монеты.',
+      completed: state.lifetimeFishSold > 0,
+      actionLabel: 'Продать'
+    },
+    {
+      id: 'upgrade_boat',
+      title: 'Улучши лодку',
+      description: 'Прокачай первую лодку, чтобы ускорить добычу.',
+      completed: state.boats.rowboat > 1,
+      actionLabel: 'Апгрейд'
+    },
+    {
+      id: 'complete_order',
+      title: 'Выполни заказ',
+      description: 'Отдай рыбу по заказу и получи монеты со звездами.',
+      completed: state.completedOrders > 0,
+      actionLabel: 'Заказы'
+    },
+    {
+      id: 'claim_daily',
+      title: 'Забери ежедневную награду',
+      description: 'Ежедневный сундук дает жетоны регаты и стартовый запас.',
+      completed: state.dailyReward.streak > 0,
+      actionLabel: 'Событие'
+    },
+    {
+      id: 'open_map',
+      title: 'Открой новую бухту',
+      description: 'Прокачай маяк и перейди к следующей зоне через карту.',
+      completed: state.unlockedZones.length > 1,
+      actionLabel: 'Карта'
+    }
+  ];
 }
 
 export function getChapterGoals(state: GameState): ChapterGoal[] {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { claimEventReward, claimMilestoneReward, createInitialState } from './state';
+import { buyBoat, claimEventReward, claimMilestoneReward, claimRegattaGoalReward, createInitialState, sellFish } from './state';
 import {
   getAvailableEventRewards,
   getAquariumSetBonus,
@@ -8,6 +8,8 @@ import {
   getDailyRewardStatus,
   getMilestoneBonus,
   getPearlTreeBonus,
+  getRegattaGoals,
+  getTutorialSteps,
   getZoneMastery
 } from './progression';
 
@@ -128,5 +130,56 @@ describe('progression systems', () => {
     expect(claimed.coins).toBeGreaterThan(state.coins);
     expect(claimedAgain.eventTokens).toBe(claimed.eventTokens);
     expect(claimedAgain.coins).toBe(claimed.coins);
+  });
+
+  it('tracks sold fish and purchased upgrades for long term goals', () => {
+    const state = createInitialState();
+    state.fish = 30;
+
+    const sold = sellFish(state);
+    const upgraded = buyBoat({ ...sold, coins: 500 }, 'rowboat');
+
+    expect(sold.lifetimeFishSold).toBe(30);
+    expect(upgraded.totalUpgradesPurchased).toBe(1);
+  });
+
+  it('exposes weekly regatta goals from player progress', () => {
+    const state = createInitialState();
+    state.completedOrders = 3;
+    state.lifetimeFishSold = 600;
+    state.totalUpgradesPurchased = 4;
+
+    const goals = getRegattaGoals(state);
+
+    expect(goals.map((goal) => goal.id)).toEqual(['regatta_orders', 'regatta_sales', 'regatta_upgrades']);
+    expect(goals.every((goal) => goal.ready)).toBe(true);
+    expect(goals.every((goal) => goal.claimed === false)).toBe(true);
+  });
+
+  it('claims a weekly regatta goal once and pays event tokens', () => {
+    const state = createInitialState();
+    state.completedOrders = 3;
+
+    const claimed = claimRegattaGoalReward(state, 'regatta_orders');
+    const claimedAgain = claimRegattaGoalReward(claimed, 'regatta_orders');
+
+    expect(claimed.claimedRegattaGoals).toContain('regatta_orders');
+    expect(claimed.eventTokens).toBeGreaterThan(state.eventTokens);
+    expect(claimedAgain.eventTokens).toBe(claimed.eventTokens);
+  });
+
+  it('returns a first-session tutorial checklist with completed state', () => {
+    const state = createInitialState();
+    state.lifetimeFishSold = 10;
+    state.boats.rowboat = 2;
+    state.dailyReward.streak = 1;
+
+    const steps = getTutorialSteps(state);
+
+    expect(steps.length).toBeGreaterThan(4);
+    expect(steps.find((step) => step.id === 'sell_fish')?.completed).toBe(true);
+    expect(steps.find((step) => step.id === 'upgrade_boat')?.completed).toBe(true);
+    expect(steps.find((step) => step.id === 'claim_daily')?.completed).toBe(true);
+    expect(steps.find((step) => step.id === 'complete_order')?.completed).toBe(false);
   });
 });

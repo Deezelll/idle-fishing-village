@@ -11,6 +11,7 @@ import {
   claimEventReward,
   claimExpedition,
   claimMilestoneReward,
+  claimRegattaGoalReward,
   completeOrder,
   getBoatCost,
   getBuildingCost,
@@ -36,6 +37,8 @@ import {
   getExpeditionProgress,
   getMilestoneBonus,
   getPearlTreeBonus,
+  getRegattaGoals,
+  getTutorialSteps,
   getZoneMastery
 } from './game/progression';
 import { loadState, resetState, saveState } from './game/storage';
@@ -543,6 +546,7 @@ function renderActiveTab(): string {
 
 function renderHarbor(): string {
   return `
+    ${renderTutorialPanel()}
     <div class="section-title">
       <div>
         <span>Быстрые улучшения</span>
@@ -557,6 +561,38 @@ function renderHarbor(): string {
       ${quickUpgrade('Пирс', `Ур. ${game.buildings.pier}`, propAsset('pier'), 'Больше места для лодок', getBuildingCost(game, 'pier'), 'buy-building', 'pier')}
     </div>
     ${renderChapterGoals()}
+  `;
+}
+
+function renderTutorialPanel(): string {
+  const steps = getTutorialSteps(game);
+  const completed = steps.filter((step) => step.completed).length;
+
+  if (completed >= steps.length) {
+    return '';
+  }
+
+  const nextStep = steps.find((step) => !step.completed) ?? steps[0];
+
+  return `
+    <div class="progress-panel tutorial-panel">
+      <div class="section-title compact">
+        <div>
+          <span>Старт капитана</span>
+          <h2>${nextStep.title}</h2>
+        </div>
+        <strong>${completed}/${steps.length}</strong>
+      </div>
+      <p>${nextStep.description}</p>
+      <div class="tutorial-list">
+        ${steps.map((step) => `
+          <article class="${step.completed ? 'complete' : ''}">
+            <strong>${step.title}</strong>
+            <span>${step.completed ? 'готово' : step.actionLabel}</span>
+          </article>
+        `).join('')}
+      </div>
+    </div>
   `;
 }
 
@@ -884,6 +920,7 @@ function renderFestival(): string {
       <strong>${game.festivalCount} раз</strong>
     </div>
     ${renderDailyReward()}
+    ${renderRegattaGoals()}
     ${renderRegattaShop()}
     <article class="festival-card">
       <img src="${iconAsset('ticket')}" alt="" />
@@ -900,6 +937,37 @@ function renderFestival(): string {
       ${miniStat('Бонус цены', `x${stats.pearlPriceBonus.toFixed(2)}`)}
     </div>
     ${renderPearlTree()}
+  `;
+}
+
+function renderRegattaGoals(): string {
+  const goals = getRegattaGoals(game);
+
+  return `
+    <div class="progress-panel regatta-goals">
+      <div class="section-title compact">
+        <div>
+          <span>Неделя регаты</span>
+          <h2>Цели события</h2>
+        </div>
+        <strong>${goals.filter((goal) => goal.claimed).length}/${goals.length}</strong>
+      </div>
+      <div class="regatta-goal-list">
+        ${goals.map((goal) => `
+          <article class="regatta-goal-card ${goal.claimed ? 'claimed' : ''}">
+            <div>
+              <strong>${goal.title}</strong>
+              <p>${goal.description}</p>
+              <span>${formatNumber(goal.current)} / ${formatNumber(goal.target)} · +${goal.rewardTokens} жет.</span>
+              <div class="meter"><span style="width: ${percent((goal.current / goal.target) * 100)}"></span></div>
+            </div>
+            <button data-action="claim-regatta-goal" data-id="${goal.id}" ${goal.ready ? '' : 'disabled'}>
+              ${goal.claimed ? 'Получено' : goal.ready ? 'Забрать' : 'В процессе'}
+            </button>
+          </article>
+        `).join('')}
+      </div>
+    </div>
   `;
 }
 
@@ -1216,6 +1284,14 @@ appRoot.addEventListener('click', (event) => {
     game = claimEventReward(game, id);
     if (game.claimedEventRewards.length > beforeEventRewards) {
       setToast('Награда регаты получена');
+    }
+  }
+
+  if (action === 'claim-regatta-goal' && id) {
+    const beforeGoals = game.claimedRegattaGoals.length;
+    game = claimRegattaGoalReward(game, id);
+    if (game.claimedRegattaGoals.length > beforeGoals) {
+      setToast('Цель регаты закрыта');
     }
   }
 
